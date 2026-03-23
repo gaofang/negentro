@@ -170,15 +170,13 @@ function migrateProvidersConfig(context) {
   const providerEnvConfig = readJson(providerEnvPath);
   if (providerEnvConfig && providerEnvConfig.providers && providerEnvConfig.providers.codex_sdk) {
     const current = providerEnvConfig.providers.codex_sdk;
-    if (!Object.prototype.hasOwnProperty.call(current, 'model')) {
+    const normalizedCurrent = {};
+    if (JSON.stringify(current) !== JSON.stringify(normalizedCurrent)) {
       writeJson(providerEnvPath, {
         ...providerEnvConfig,
         providers: {
           ...providerEnvConfig.providers,
-          codex_sdk: {
-            ...current,
-            model: '',
-          },
+          codex_sdk: normalizedCurrent,
         },
       });
     }

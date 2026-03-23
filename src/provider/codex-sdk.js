@@ -1,115 +1,75 @@
-import { spawn } from 'child_process';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import { Codex } from '@openai/codex-sdk';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WORKER_PATH = path.join(__dirname, 'codex-sdk-worker.js');
-
-async function runCodexSdkProvider({ cwd, provider, prompt, schema }) {
-  const payload = {
-    cwd,
-    provider,
-    prompt,
-    schema,
-  };
-
-  return new Promise(resolve => {
-    const child = spawn(process.execPath, [WORKER_PATH], {
-      cwd,
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env,
+async function runCodexSdkProvider({ cwd, prompt, schema }) {
+  try {
+    const client = new Codex();
+    const thread = client.startThread({
+      workingDirectory: cwd,
     });
+    const result = await thread.run(prompt, {
+      outputSchema: schema,
+    });
+    const outputMessage = extractCodexSdkText(result);
 
-    let stdout = '';
-    let stderr = '';
-    let settled = false;
-
-    const finalize = result => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      resolve(result);
+    return {
+      ok: true,
+      exitCode: 0,
+      rawText: JSON.stringify(result, null, 2),
+      outputMessage,
+      stderr: '',
+      error: null,
     };
-
-    child.stdout.on('data', chunk => {
-      stdout += String(chunk);
-    });
-
-    child.stderr.on('data', chunk => {
-      stderr += String(chunk);
-    });
-
-    child.on('error', error => {
-      finalize({
-        ok: false,
-        exitCode: 1,
-        rawText: stdout,
-        outputMessage: '',
-        stderr: stderr || String(error && error.stack ? error.stack : error),
-        error: `codex sdk worker failed: ${error && error.message ? error.message : String(error)}`,
-      });
-    });
-
-    child.on('close', code => {
-      const result = parseWorkerOutput(stdout);
-      if (result) {
-        finalize({
-          ...result,
-          exitCode: typeof result.exitCode === 'number' ? result.exitCode : code || 0,
-          stderr: result.stderr || stderr,
-        });
-        return;
-      }
-
-      finalize({
-        ok: false,
-        exitCode: typeof code === 'number' ? code : 1,
-        rawText: stdout,
-        outputMessage: '',
-        stderr,
-        error: buildWorkerFailureMessage(code, stdout, stderr),
-      });
-    });
-
-    child.stdin.on('error', () => {
-      // SDK 底层 codex 进程在异常退出时可能导致上游 stdin 提前断开。
-      // 这里吞掉写入阶段的 pipe 错误，让最终错误由 worker 的 stderr/exit code 来表达。
-    });
-
-    child.stdin.end(JSON.stringify(payload));
-  });
+  } catch (error) {
+    return {
+      ok: false,
+      exitCode: 1,
+      rawText: '',
+      outputMessage: '',
+      stderr: String(error && error.stack ? error.stack : error),
+      error: summarizeCodexSdkFailure(error),
+    };
+  }
 }
 
-function parseWorkerOutput(stdout) {
-  const content = String(stdout || '').trim();
-  if (!content) {
-    return null;
-  }
+function summarizeCodexSdkFailure(error) {
+  const message = String(error && error.message ? error.message : error || '');
+  const lowercase = message.toLowerCase();
 
-  const lines = content.split('\n').filter(Boolean);
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    try {
-      return JSON.parse(lines[index]);
-    } catch (error) {
-      continue;
-    }
+  if (message.includes('401') || lowercase.includes('unauthorized')) {
+    return `codex sdk unauthorized: ${message}`;
   }
-
-  return null;
+  if (lowercase.includes('invalid model') || lowercase.includes('product not right')) {
+    return `codex sdk invalid model: ${message}`;
+  }
+  if (lowercase.includes('timeout')) {
+    return `codex sdk timeout: ${message}`;
+  }
+  if (lowercase.includes('network') || message.includes('/v1/responses') || message.includes('/responses')) {
+    return `codex sdk network failure: ${message}`;
+  }
+  return `codex sdk failed: ${message}`;
 }
 
-function buildWorkerFailureMessage(code, stdout, stderr) {
-  const stderrText = String(stderr || '').trim();
-  const stdoutText = String(stdout || '').trim();
-
-  if (stderrText) {
-    return `codex sdk worker failed: ${stderrText}`;
+function extractCodexSdkText(result) {
+  if (!result) {
+    return '';
   }
-  if (stdoutText) {
-    return `codex sdk worker failed: ${stdoutText}`;
+  if (typeof result === 'string') {
+    return result;
   }
-  return `codex sdk worker exited with code ${typeof code === 'number' ? code : 'unknown'}`;
+  if (typeof result.finalResponse === 'string') {
+    return result.finalResponse;
+  }
+  if (typeof result.finalOutput === 'string') {
+    return result.finalOutput;
+  }
+  if (typeof result.outputText === 'string') {
+    return result.outputText;
+  }
+  if (typeof result.lastMessage === 'string') {
+    return result.lastMessage;
+  }
+  return JSON.stringify(result, null, 2);
 }
 
 export { runCodexSdkProvider };

@@ -376,11 +376,7 @@ function initCommand(context) {
 
   writeJsonIfAbsent(path.join(context.paths.config, 'provider.env.json'), {
     providers: {
-      codex_sdk: {
-        api_key_env: 'OPENAI_API_KEY',
-        base_url: '',
-        model: '',
-      },
+      codex_sdk: {},
     },
   });
 
@@ -1085,26 +1081,8 @@ function loadDefaultProvider(context) {
   return {
     id: providerId,
     type: provider.type || 'codex-sdk',
-    model: providerEnv.model || provider.model || 'default',
     timeout_ms: provider.timeout_ms || 12000,
     max_output_tokens: provider.max_output_tokens || 16000,
-    api_key_env: providerEnv.api_key_env || provider.api_key_env || 'OPENAI_API_KEY',
-    api_key: providerEnv.api_key || provider.api_key || '',
-    base_url: providerEnv.base_url || provider.base_url || '',
-    approval_policy: providerEnv.approval_policy || provider.approval_policy || 'never',
-    sandbox_mode: providerEnv.sandbox_mode || provider.sandbox_mode || 'read-only',
-    web_search_enabled:
-      typeof providerEnv.web_search_enabled === 'boolean'
-        ? providerEnv.web_search_enabled
-        : typeof provider.web_search_enabled === 'boolean'
-          ? provider.web_search_enabled
-          : false,
-    network_access_enabled:
-      typeof providerEnv.network_access_enabled === 'boolean'
-        ? providerEnv.network_access_enabled
-        : typeof provider.network_access_enabled === 'boolean'
-          ? provider.network_access_enabled
-          : false,
   };
 }
 

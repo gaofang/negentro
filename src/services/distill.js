@@ -367,7 +367,7 @@ function normalizePatternsFromAgent(parsed, scope, fallbackPatterns) {
 function normalizeDistillationResult(scopes, owners, parsed, helpers) {
   const { createCard, createQuestion, renderEvidenceList, findOwner } = helpers;
   const scopeMap = new Map(normalizeArray(scopes).map(scope => [scope.id, scope]));
-  const topics = normalizeArray(parsed && parsed.topics)
+  let topics = normalizeArray(parsed && parsed.topics)
     .map(topic => ({
       schemaVersion: 1,
       id: topic.id,
@@ -380,7 +380,7 @@ function normalizeDistillationResult(scopes, owners, parsed, helpers) {
     }))
     .filter(topic => topic.id && scopeMap.has(topic.scope));
 
-  const patterns = normalizeArray(parsed && parsed.patterns)
+  let patterns = normalizeArray(parsed && parsed.patterns)
     .map(pattern => ({
       schemaVersion: 1,
       id: pattern.id,
@@ -449,11 +449,70 @@ function normalizeDistillationResult(scopes, owners, parsed, helpers) {
     })
     .filter(question => question.meta.id);
 
+  if (!topics.length || !patterns.length) {
+    const inferred = inferTopicsAndPatternsFromCards(cards, scopes);
+    if (!topics.length) {
+      topics = inferred.topics;
+    }
+    if (!patterns.length) {
+      patterns = inferred.patterns;
+    }
+  }
+
   return {
     topics,
     patterns,
     questions,
     cards,
+  };
+}
+
+function inferTopicsAndPatternsFromCards(cards, scopes) {
+  const scopeEntries = normalizeArray(scopes);
+  const topics = [];
+  const patterns = [];
+
+  normalizeArray(cards).forEach(card => {
+    const scope = scopeEntries.find(entry =>
+      normalizeArray(card.meta.scopePaths).some(scopePath => normalizeArray(entry.paths).includes(scopePath)),
+    ) || scopeEntries[0];
+
+    if (!scope) {
+      return;
+    }
+
+    const topicId = `topic_${card.meta.id.replace(/^kc_/, '')}`;
+    topics.push({
+      schemaVersion: 1,
+      id: topicId,
+      scope: scope.id,
+      title: card.body.title,
+      why_it_matters: card.body.sections.problem,
+      evidence_refs_primary: normalizeArray(card.body.evidence),
+      changed_files: [],
+      confidence: Number(card.meta.confidence || 0.6),
+    });
+
+    patterns.push({
+      schemaVersion: 1,
+      id: `pattern_${card.meta.id.replace(/^kc_/, '')}`,
+      topic_id: topicId,
+      scope: scope.id,
+      title: card.body.title,
+      pattern_kind: card.meta.kind === 'workflow' ? 'workflow' : 'rule',
+      statement: card.body.sections.recommendation,
+      evidenceRefsPrimary: normalizeArray(card.body.evidence),
+      confidence: Number(card.meta.confidence || 0.6),
+      uncertainty: {
+        requiresHuman: false,
+        reasons: [],
+      },
+    });
+  });
+
+  return {
+    topics,
+    patterns,
   };
 }
 

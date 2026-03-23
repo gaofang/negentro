@@ -1,51 +1,4 @@
-import path from 'path';
 import { Codex } from '@openai/codex-sdk';
-
-function resolveApiKey({ provider }) {
-  const preferredEnv = provider.api_key_env || 'OPENAI_API_KEY';
-  return (
-    provider.api_key ||
-    process.env[preferredEnv] ||
-    process.env.CODEX_API_KEY ||
-    process.env.OPENAI_API_KEY ||
-    ''
-  );
-}
-
-function buildCodexHome({ cwd }) {
-  return path.resolve(cwd, '.entro', 'system', 'runtime', 'codex-home');
-}
-
-function buildCodexEnv({ cwd, provider }) {
-  const apiKey = resolveApiKey({ provider });
-  const baseUrl = provider.base_url || process.env.OPENAI_BASE_URL || '';
-  const codexHome = buildCodexHome({ cwd });
-  const env = {
-    ...process.env,
-    CODEX_HOME: codexHome,
-    HOME: codexHome,
-  };
-
-  if (apiKey) {
-    env.CODEX_API_KEY = apiKey;
-  }
-  if (baseUrl) {
-    env.OPENAI_BASE_URL = baseUrl;
-  }
-
-  return env;
-}
-
-function buildThreadOptions({ cwd, provider }) {
-  return {
-    workingDirectory: cwd,
-    model: provider.model && provider.model !== 'default' ? provider.model : undefined,
-    approvalPolicy: provider.approval_policy || 'never',
-    sandboxMode: provider.sandbox_mode || 'read-only',
-    webSearchEnabled: Boolean(provider.web_search_enabled),
-    networkAccessEnabled: Boolean(provider.network_access_enabled),
-  };
-}
 
 function summarizeCodexSdkFailure(error) {
   const message = String(error && error.message ? error.message : error || '');
@@ -64,18 +17,6 @@ function summarizeCodexSdkFailure(error) {
     return `codex sdk network failure: ${message}`;
   }
   return `codex sdk failed: ${message}`;
-}
-
-function validateProviderConfig(provider) {
-  if (provider.base_url && !provider.network_access_enabled) {
-    return 'codex sdk config invalid: 使用自定义 base_url 时，`provider.env.json` 里的 `network_access_enabled` 必须设为 true';
-  }
-
-  if (provider.base_url && (!provider.model || provider.model === 'default')) {
-    return 'codex sdk config invalid: 使用自定义 base_url 时，必须在 `provider.env.json` 里显式配置 `model`';
-  }
-
-  return null;
 }
 
 function extractCodexSdkText(result) {
@@ -135,41 +76,13 @@ process.on('unhandledRejection', error => {
 
 async function main() {
   const payload = await readPayload();
-  const { cwd, provider, prompt, schema } = payload;
-  const apiKey = resolveApiKey({ provider });
-  const configError = validateProviderConfig(provider);
-
-  if (!apiKey) {
-    writeResult({
-      ok: false,
-      exitCode: 1,
-      rawText: '',
-      outputMessage: '',
-      stderr: '',
-      error: 'codex sdk unauthorized: missing api key',
-    });
-    return;
-  }
-
-  if (configError) {
-    writeResult({
-      ok: false,
-      exitCode: 1,
-      rawText: '',
-      outputMessage: '',
-      stderr: '',
-      error: configError,
-    });
-    return;
-  }
+  const { cwd, prompt, schema } = payload;
 
   try {
-    const client = new Codex({
-      apiKey,
-      baseUrl: provider.base_url || undefined,
-      env: buildCodexEnv({ cwd, provider }),
+    const client = new Codex();
+    const thread = client.startThread({
+      workingDirectory: cwd,
     });
-    const thread = client.startThread(buildThreadOptions({ cwd, provider }));
     const result = await thread.run(prompt, {
       outputSchema: schema,
     });
