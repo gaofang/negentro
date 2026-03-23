@@ -9,8 +9,7 @@
   },
   "scripts": {
     "entro": "node ./src/cli.js",
-    "help": "node ./src/cli.js help",
-    "test:ts": "node --loader ts-node/esm ./src/test.ts"
+    "help": "node ./src/cli.js help"
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.72.0"
