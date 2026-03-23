@@ -1,0 +1,25 @@
+{
+  "name": "@ecom/entro",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "CLI for lowering repository entropy by distilling reusable engineering knowledge.",
+  "bin": {
+    "entro": "./src/cli.js"
+  },
+  "scripts": {
+    "entro": "node ./src/cli.js",
+    "help": "node ./src/cli.js help"
+  },
+  "dependencies": {
+    "@openai/codex-sdk": "^0.72.0"
+  },
+  "keywords": [
+    "codex",
+    "knowledge",
+    "agents",
+    "skills",
+    "entropy"
+  ],
+  "license": "ISC"
+}
