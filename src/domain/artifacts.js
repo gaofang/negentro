@@ -97,55 +97,6 @@ function createAnswer({ id, question, answerPayload, providedBy, source }) {
   };
 }
 
-function buildWorkflowRecommendation(scope) {
-  if (scope.id === 'publish') {
-    return [
-      '1. 先阅读发布页架构文档，再进入代码搜索，先判断问题落在应用层、goods-sdk 还是 schema 协议层。',
-      '2. 新增字段或联动时，优先判断能否通过 schema 驱动、helper 配置或场景 actions 解决，再考虑写定制组件逻辑。',
-      '3. 涉及组件扩展时，先判断是 simple component / config-components，还是必须升级为新的 pg-* 实体组件。',
-      '4. 变更完成后，需要连带检查 create 链路、发布校验、组件映射与场景编排是否一起成立。',
-    ].join('\n');
-  }
-
-  if (scope.id === 'list') {
-    return [
-      '1. 先阅读列表页架构文档，确认改动是在路由入口、Tabs 壳、SearchComp，还是中间运营区。',
-      '2. 新增筛选或列表能力时，先梳理参数格式化、URL 同步、首屏预取和刷新链路是否要同步改动。',
-      '3. 保持表单状态、URL 参数、首搜行为和手动刷新语义一致，避免出现 reset 后脏参数回填。',
-      '4. 如果涉及 tab、白名单或店铺形态差异，需要额外检查分流逻辑和跨 tab 影响面。',
-    ].join('\n');
-  }
-
-  return [
-    '1. 先确认是自动埋点扩展还是业务手动埋点，并梳理事件语义、字段口径和触发时机。',
-    '2. 默认复用现有埋点封装，不要直接散落底层上报逻辑。',
-    '3. 提交前补齐埋点字段、验收方式与回查路径，避免“代码发了但无法查数”。',
-  ].join('\n');
-}
-
-function buildRuleRecommendation(scope) {
-  if (scope.id === 'publish') {
-    return [
-      '- 发布页优先遵守 schema 驱动原则：显隐、必填、校验、联动、默认值尽量放到 schema 与 actions 中。',
-      '- 可配置的提示文案、问号说明、助手内容，优先沉淀到 helper 配置，不要散落在组件 JSX 里。',
-      '- 只有在复杂交互、副作用、额外请求或强业务复用封装出现时，才升级成新的实体组件。',
-    ].join('\n');
-  }
-
-  if (scope.id === 'list') {
-    return [
-      '- 列表页改动默认要保持筛选状态与 URL 参数同步。',
-      '- 改动首屏、路由或容器能力时，要回头验证 prefetch 与初始化搜索是否仍然成立。',
-      '- SearchComp 是数据流收敛点，能收敛在参数格式化和容器层的逻辑，不要向各 tab 分散。',
-    ].join('\n');
-  }
-
-  return [
-    '- 业务埋点默认走统一工具层，不要直接新增原始上报调用。',
-    '- 埋点实现与字段设计、查数口径、验证路径要一起沉淀。',
-  ].join('\n');
-}
-
 function renderAgents(cards) {
   const header = [
     '# AGENTS 草案（Entro 生成）',
@@ -172,6 +123,11 @@ function renderAgents(cards) {
 
 function renderSkill(card) {
   const recommendation = safeSection(card.body.sections, 'recommendation');
+  const preflight = safeSection(card.body.sections, 'preflight');
+  const steps = safeSection(card.body.sections, 'steps');
+  const entrypoints = safeSection(card.body.sections, 'entrypoints');
+  const pitfalls = safeSection(card.body.sections, 'pitfalls');
+  const validation = safeSection(card.body.sections, 'validation');
   const notes = normalizeArray(card.body.notes).map(item => `- ${item.note}`);
   return [
     '---',
@@ -185,9 +141,24 @@ function renderSkill(card) {
     '## 适用问题',
     safeSection(card.body.sections, 'problem'),
     '',
-    '## 推荐做法',
-    recommendation,
-    '',
+    recommendation ? '## 推荐做法' : '',
+    recommendation || '',
+    recommendation ? '' : '',
+    preflight ? '## 前置判断' : '',
+    preflight || '',
+    preflight ? '' : '',
+    entrypoints ? '## 先看这些文件' : '',
+    entrypoints || '',
+    entrypoints ? '' : '',
+    steps ? '## 操作步骤' : '',
+    steps || '',
+    steps ? '' : '',
+    pitfalls ? '## 常见坑' : '',
+    pitfalls || '',
+    pitfalls ? '' : '',
+    validation ? '## 最小验证清单' : '',
+    validation || '',
+    validation ? '' : '',
     notes.length ? '## 已确认默认做法' : '',
     ...notes,
     notes.length ? '' : '',
@@ -260,10 +231,10 @@ function buildSyncPlan(publishConfig, compiledAgents, compiledSkills) {
       {
         target: {
           id: 'app-output-agents',
-          path: '.entro/output/AGENTS.generated.md',
+          path: '.entro/output/AGENTS.md',
           mode: 'draft-only',
         },
-        source: '.entro/output/AGENTS.generated.md',
+        source: '.entro/output/AGENTS.md',
         cardIds: compiledAgents.map(card => card.meta.id),
       },
     ],
@@ -494,33 +465,7 @@ function createFollowUpQuestion(context, question, normalized) {
 }
 
 function normalizeQuestionDocument(question) {
-  if (!question || !question.body) {
-    return question;
-  }
-
-  const next = {
-    ...question,
-    body: {
-      ...question.body,
-    },
-  };
-
-  if (question.meta && question.meta.id === 'q_goods_tracking_default_api_v1') {
-    next.body.title = '确认商品域默认埋点 API 用法';
-    next.body.rationale = '这个答案决定了埋点 skill 能否安全给出统一默认 API，并避免业务代码散落底层调用。';
-  }
-
-  if (question.meta && question.meta.id === 'q_goods_list_default_container_v1') {
-    next.body.title = '确认商品列表页默认容器选型';
-    next.body.rationale = '这个答案会直接决定生成的列表 skill 是推荐保守起步方案，还是默认走性能优先方案。';
-  }
-
-  if (question.meta && (question.meta.id === 'q_goods_publish_recommended_path' || question.meta.id === 'q_goods_publish_component_path_v2')) {
-    next.body.title = '确认商品发布字段新增的默认组件实现路径';
-    next.body.rationale = '只有先确认默认实现路径，发布组件开发经验才能沉淀成可复用且可信的 skill。';
-  }
-
-  return next;
+  return question;
 }
 
 function upsertMinedCard(context, card) {
@@ -666,78 +611,57 @@ function buildConfirmedDefaultNote(question, extracted) {
     return buildConfirmedChoiceNote(question, extracted);
   }
 
-  switch (question.meta.id) {
-    case 'q_goods_publish_recommended_path':
-    case 'q_goods_publish_component_path_v2':
-      return '当需求本质上只是“一个 schema 字段 + 一个基础控件”时，优先走基于 config-components / generateMagicComponents / MagicComponent 的 simple component 路径；只有在存在复杂交互、副作用、额外请求或更强的可复用业务封装诉求时，才新建 pg-* 实体组件。';
-    case 'q_goods_list_default_container_v1':
-      return `新建列表页优先从 ${normalizeListContainer(extracted.default_container || 'Search')} 起步；只有在${normalizeListUpgradeCondition(extracted.upgrade_condition || '存在明确的缓存或首屏性能诉求')}时，再升级到 SwrSearch 或 SearchWithSwrLocal。典型例外：${normalizeCanonicalExample(extracted.canonical_example || '/list 核心实现')}。`;
-    case 'q_goods_tracking_default_api_v1':
-      return [
-        `商品域业务自定义埋点默认使用 ${normalizeTrackingPreferredApi(extracted.preferred_api || 'sendEvent')}。`,
-        `业务代码不要直接调用 ${normalizeTrackingAvoidApi(extracted.avoid_api || 'apps/goods/ffa-goods/src/single/tea.ts')}。`,
-        `只有在 ${normalizeTrackingException(extracted.exception_cases || '明确要求 mera_custom_event 口径')} 时，才使用 reportEvent。`,
-        `参考示例：${normalizeExampleFiles(extracted.example_files || 'packages/goods-sdk/utils/src/utils/tea/index.ts')}。`,
-      ].join('');
-    default:
-      return '';
-  }
+  const rawText = String((normalizedAnswerLikeText(extracted) || '')).trim();
+  return rawText ? `维护人补充上下文：${rawText}` : '';
 }
 
 function buildConfirmedChoiceNote(question, extracted) {
-  const selected = extracted.selected_option_id || '';
-  switch (question.meta.id) {
-    case 'q_publish_form_item_default_v1':
-      if (selected === 'simple_component_first') {
-        return '新增发布字段时，默认优先走 simple component / config-components / MagicComponent 这类配置式路径；只有在存在复杂交互、副作用、额外请求或更强业务复用诉求时，才升级为 pg-* 实体组件。';
-      }
-      if (selected === 'pg_component_first') {
-        return '新增发布字段时，默认优先建设或扩展 pg-* 实体组件，再接入组件映射与场景编排；配置式 simple component 只用于非常轻量的展示或基础字段。';
-      }
-      if (selected === 'depends_on_complexity') {
-        return '新增发布字段时，没有单一默认实现路径；先判断是否存在复杂交互、副作用、额外请求或强复用诉求，再决定走 simple component 还是 pg-* 实体组件。';
-      }
-      return '';
-    case 'q_tracking_workflow_default_v1':
-      if (selected === 'sdk_send_event') {
-        return '商品域业务埋点默认优先复用 goods-sdk 的统一埋点封装，不直接散落应用层原始上报调用。';
-      }
-      if (selected === 'app_tea_wrapper') {
-        return '商品域业务埋点默认优先从 ffa-goods 应用侧 tea 封装出发，再由应用统一管理上报细节。';
-      }
-      if (selected === 'depends_on_event_kind') {
-        return '商品域埋点没有单一默认 API；需要先区分自动埋点、业务事件和特殊口径，再决定使用哪层封装。';
-      }
-      return '';
-    case 'q_list_workflow_default_v1':
-      if (selected === 'search_first') {
-        return '新建商品列表页时，默认先从基础 Search 容器起步；只有在存在明确缓存、预取或首屏性能诉求时，再升级到 SwrSearch 一类方案。';
-      }
-      if (selected === 'swr_search_first') {
-        return '新建商品列表页时，默认直接采用带缓存/预取能力的 SwrSearch 类容器，以保持首屏与刷新体验一致。';
-      }
-      if (selected === 'depends_on_scenario') {
-        return '新建商品列表页时，没有固定默认容器；需要先根据 tab 分流、缓存诉求、首屏性能和数据体量来选择 Search 或 SwrSearch。';
-      }
-      return '';
-    case 'q_publish_workflow_default_v1':
-      if (selected === 'app_layer_first') {
-        return '处理典型发布需求时，默认先从应用层页面入口与业务容器排查，再逐步下钻到 schema 或 goods-sdk 共享层。';
-      }
-      if (selected === 'schema_actions_first') {
-        return '处理典型发布需求时，默认先判断能否在 schema、actions、helper 配置层解决，尽量避免一开始就改实体组件。';
-      }
-      if (selected === 'sdk_component_first') {
-        return '处理典型发布需求时，默认先从 goods-sdk 共享组件和发布框架层排查，再回看应用侧接入与编排。';
-      }
-      return '';
+  const optionId = String(extracted.selected_option_id || '').trim();
+  const comment = String(extracted.comment || '').trim();
+  const base = mapChoiceNote(optionId, question.body.title);
+
+  if (!base) {
+    return comment ? `维护人补充说明：${comment}` : '';
+  }
+
+  return comment ? `${base}。补充说明：${comment}` : base;
+}
+
+function mergeRecommendationWithDefault(currentRecommendation, note) {
+  if (!note) {
+    return currentRecommendation;
+  }
+
+  const marker = '补充确认：';
+  if (String(currentRecommendation || '').includes(note)) {
+    return currentRecommendation;
+  }
+
+  if (!String(currentRecommendation || '').trim()) {
+    return `${marker}${note}`;
+  }
+
+  return `${currentRecommendation}\n\n${marker}${note}`;
+}
+
+function mapChoiceNote(optionId, title) {
+  switch (optionId) {
+    case 'confirm-default':
+      return `维护人确认“${title}”存在统一默认做法，可按当前经验卡继续沉淀`;
+    case 'depends-on-scenario':
+      return `维护人确认“${title}”需要按子场景区分，不能抽象成单一路径`;
+    case 'not-enough-evidence':
+      return `维护人确认“${title}”当前证据不足，暂不宜提升为默认经验`;
     default:
       return '';
   }
 }
 
-function mergeRecommendationWithDefault(currentRecommendation, note) {
-  return currentRecommendation;
+function normalizedAnswerLikeText(extracted) {
+  return Object.entries(extracted || {})
+    .filter(([, value]) => String(value || '').trim())
+    .map(([key, value]) => `${key}=${String(value).trim()}`)
+    .join('；');
 }
 
 function replaceExt(filePath, ext) {
@@ -768,56 +692,10 @@ function normalizePublishConfig(publishConfig) {
   };
 }
 
-function normalizeListContainer(value) {
-  return String(value).replace(/^start with\s+/i, '').trim();
-}
-
-function normalizeListUpgradeCondition(value) {
-  return String(value)
-    .replace(/^only\s+when\s+/i, '')
-    .replace(/^there\s+is\s+/i, '')
-    .replace(/^a\s+/i, '')
-    .trim();
-}
-
-function normalizeCanonicalExample(value) {
-  return String(value)
-    .replace(/^the\s+/i, '')
-    .trim();
-}
-
-function normalizeTrackingPreferredApi(value) {
-  return String(value)
-    .replace(/^use\s+/i, '')
-    .trim();
-}
-
-function normalizeTrackingAvoidApi(value) {
-  return String(value)
-    .replace(/^do\s+not\s+call\s+/i, '')
-    .replace(/^call\s+/i, '')
-    .replace(/\s+directly\s+from\s+business\s+code$/i, '')
-    .trim();
-}
-
-function normalizeTrackingException(value) {
-  return String(value)
-    .replace(/^use\s+reportEvent\s+only\s+when\s+/i, '')
-    .replace(/^only\s+when\s+/i, '')
-    .replace(/^explicitly\s+/i, '')
-    .trim();
-}
-
-function normalizeExampleFiles(value) {
-  return String(value).trim();
-}
-
 export {
   createCard,
   createQuestion,
   createAnswer,
-  buildWorkflowRecommendation,
-  buildRuleRecommendation,
   renderAgents,
   renderSkill,
   renderReference,

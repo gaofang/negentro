@@ -1,5 +1,24 @@
 import fs from 'fs';
 import path from 'path';
+import { uniqueBy } from '../shared/collections.js';
+
+function buildFullAppScope(context) {
+  const appRelativePath = path.relative(context.repoRoot, context.appRoot) || '.';
+  return {
+    id: 'app',
+    label: '应用全域',
+    paths: [appRelativePath],
+    primaryRoots: [appRelativePath],
+    excludeRoots: ['**/AGENTS.md', '**/.agents/**', '**/.trae/skills/**', '**/.entro/**'],
+  };
+}
+
+function resolveTargetScopes(context, config, options, resolveScopes) {
+  if (options['full-app']) {
+    return [buildFullAppScope(context)];
+  }
+  return resolveScopes(config.scopes, options.scope);
+}
 
 async function discoverCommand(context, options, helpers) {
   const {
@@ -7,6 +26,7 @@ async function discoverCommand(context, options, helpers) {
     migrateLegacyFiles,
     readJson,
     resolveScopes,
+    deriveFullAppScopes,
     runDiscoveryTask,
     loadDefaultProvider,
     discoverTopicsForScope,
@@ -21,11 +41,16 @@ async function discoverCommand(context, options, helpers) {
   migrateLegacyFiles(context);
 
   const config = readJson(path.join(context.paths.config, 'scopes.json')) || { scopes: [] };
-  const targetScopes = resolveScopes(config.scopes, options.scope);
   const catalog = readJson(path.join(context.paths.evidence, 'catalog', 'sources.json'));
 
   if (!catalog || !Array.isArray(catalog.sources)) {
     throw new Error('source catalog missing. Run `entro classify-sources` first.');
+  }
+  const targetScopes = options['full-app']
+    ? deriveFullAppScopes(context, catalog.sources, { maxScopes: 8 })
+    : resolveTargetScopes(context, config, options, resolveScopes);
+  if (!targetScopes.length) {
+    throw new Error('no scopes resolved. Check scopes config or rerun with `--full-app`.');
   }
 
   const taskResult = await runDiscoveryTask(context, {
@@ -56,8 +81,10 @@ async function distillCommand(context, options, helpers) {
     migrateLegacyFiles,
     clearGeneratedCandidateState,
     clearGeneratedOpenQuestions,
+    clearScopeGeneratedState,
     readJson,
     resolveScopes,
+    deriveFullAppScopes,
     runRepositoryDistillation,
     loadDefaultProvider,
     toRepoRelative,
@@ -77,8 +104,6 @@ async function distillCommand(context, options, helpers) {
 
   ensureInitialized(context);
   migrateLegacyFiles(context);
-  clearGeneratedCandidateState(context);
-  clearGeneratedOpenQuestions(context);
 
   const summary = readJson(path.join(context.paths.evidence, 'repo-scan', 'workspace-summary.json'));
   if (!summary) {
@@ -87,30 +112,70 @@ async function distillCommand(context, options, helpers) {
 
   const config = readJson(path.join(context.paths.config, 'scopes.json')) || { scopes: [] };
   const owners = readJson(path.join(context.paths.config, 'owners.json')) || { owners: [] };
-  const targetScopes = resolveScopes(config.scopes, options.scope);
   const catalog = readJson(path.join(context.paths.evidence, 'catalog', 'sources.json'));
 
   if (!catalog || !Array.isArray(catalog.sources)) {
     throw new Error('source catalog missing. Run `entro classify-sources` first.');
   }
+  const targetScopes = options['full-app']
+    ? deriveFullAppScopes(context, catalog.sources, { maxScopes: 8 })
+    : resolveTargetScopes(context, config, options, resolveScopes);
+  if (!targetScopes.length) {
+    throw new Error('no scopes resolved. Check scopes config or rerun with `--full-app`.');
+  }
 
-  const result = await runRepositoryDistillation(context, {
-    scopes: targetScopes,
-    owners,
-    sources: catalog.sources,
-    changedFiles: Boolean(options['changed-only']) ? summary.changedFiles || [] : [],
-    options,
-  }, {
-    loadDefaultProvider,
-    toRepoRelative,
-    filterChangedFilesForScope,
-    filterSourcesForScope,
-    findOwner,
-    createCard,
-    createQuestion,
-    renderEvidenceList,
-    persistAgentRun,
-  });
+  if (options.scope || options['full-app']) {
+    clearScopeGeneratedState(context, targetScopes);
+  } else {
+    clearGeneratedCandidateState(context);
+    clearGeneratedOpenQuestions(context);
+    clearScopeGeneratedState(context, config.scopes);
+  }
+
+  if (options['full-app']) {
+    console.log(`[entro] full-app 分桶数：${targetScopes.length}`);
+  }
+  const merged = {
+    topics: [],
+    patterns: [],
+    questions: [],
+    cards: [],
+    runs: [],
+  };
+
+  for (const scope of targetScopes) {
+    const result = await runRepositoryDistillation(context, {
+      scopes: [scope],
+      owners,
+      sources: catalog.sources,
+      changedFiles: Boolean(options['changed-only']) ? summary.changedFiles || [] : [],
+      options,
+    }, {
+      loadDefaultProvider,
+      toRepoRelative,
+      filterChangedFilesForScope,
+      filterSourcesForScope,
+      findOwner,
+      createCard,
+      createQuestion,
+      renderEvidenceList,
+      persistAgentRun,
+    });
+
+    merged.topics.push(...result.topics);
+    merged.patterns.push(...result.patterns);
+    merged.questions.push(...result.questions);
+    merged.cards.push(...result.cards);
+    merged.runs.push(...result.runs);
+  }
+
+  const result = {
+    topics: uniqueBy(merged.topics, item => item.id),
+    patterns: uniqueBy(merged.patterns, item => item.id),
+    questions: uniqueBy(merged.questions, item => item.meta && item.meta.id),
+    cards: uniqueBy(merged.cards, item => item.meta && item.meta.id),
+    runs: merged.runs,
+  };
 
   printAgentRunSummaries(result.runs);
 

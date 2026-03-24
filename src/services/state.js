@@ -55,6 +55,32 @@ function clearGeneratedOpenQuestions(context) {
   clearJsonDirectory(path.join(context.paths.questions, 'open'));
 }
 
+function clearScopeGeneratedState(context, scopes) {
+  const scopePaths = normalizeArray(scopes).flatMap(scope => normalizeArray(scope.paths));
+  if (!scopePaths.length) {
+    clearGeneratedCandidateState(context);
+    clearGeneratedOpenQuestions(context);
+    clearScopeDraftCards(context, []);
+    return;
+  }
+
+  [
+    path.join(context.paths.candidates, 'topics'),
+    path.join(context.paths.candidates, 'patterns'),
+    path.join(context.paths.candidates, 'questions'),
+  ].forEach(directory => {
+    clearJsonDirectoryByPredicate(directory, filePath => belongsToScope(filePath, scopePaths));
+  });
+
+  clearJsonDirectoryByPredicate(path.join(context.paths.questions, 'open'), filePath => belongsToScope(filePath, scopePaths));
+  clearScopeDraftCards(context, scopePaths);
+}
+
+function clearScopeDraftCards(context, scopePaths) {
+  clearJsonDirectoryByPredicate(path.join(context.paths.cards, 'draft'), filePath => belongsToScope(filePath, scopePaths));
+  clearJsonDirectoryByPredicate(path.join(context.paths.cards, 'needs-human'), filePath => belongsToScope(filePath, scopePaths));
+}
+
 function clearJsonDirectory(directory) {
   if (!fs.existsSync(directory)) {
     return;
@@ -67,6 +93,44 @@ function clearJsonDirectory(directory) {
     });
 }
 
+function clearJsonDirectoryByPredicate(directory, predicate) {
+  if (!fs.existsSync(directory)) {
+    return;
+  }
+
+  fs.readdirSync(directory)
+    .filter(file => file.endsWith('.json'))
+    .forEach(file => {
+      const filePath = path.join(directory, file);
+      if (predicate(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    });
+}
+
+function belongsToScope(filePath, scopePaths) {
+  const document = readJson(filePath);
+  if (!document) {
+    return false;
+  }
+
+  const candidatePaths =
+    normalizeArray(document.scopePaths)
+      .concat(normalizeArray(document.meta && document.meta.scopePaths))
+      .concat(normalizeArray(document.scope))
+      .concat(typeof document.scope === 'string' ? [document.scope] : []);
+
+  if (!candidatePaths.length) {
+    return false;
+  }
+
+  return candidatePaths.some(candidate =>
+    normalizeArray(scopePaths).some(scopePath =>
+      String(candidate || '').startsWith(scopePath) || String(scopePath || '').startsWith(String(candidate || '')),
+    ),
+  );
+}
+
 function migrateConfigFile(context) {
   const configPath = path.join(context.paths.config, 'entro.config.json');
   const config = readJson(configPath);
@@ -76,7 +140,7 @@ function migrateConfigFile(context) {
 
   const normalized = {
     version: 2,
-    defaultScopes: config.defaultScopes || ['goods.publish', 'goods.list', 'goods.tracking'],
+    defaultScopes: config.defaultScopes || ['app'],
     publish: normalizePublishConfig(config.publish || {}),
     humanInTheLoop: {
       channel: (config.humanInTheLoop && config.humanInTheLoop.channel) || 'console',
@@ -256,52 +320,24 @@ function migrateScopesConfig(context) {
     return;
   }
 
-  const defaults = {
-    publish: {
-      label: '商品发布',
-      primaryRoots: [
-        toRepoRelative(context, path.join(context.appRoot, 'src/pages/create-goods')),
-        toRepoRelative(context, path.join(context.appRoot, 'src/biz-components')),
-        'packages/goods-sdk',
-      ],
-      excludeRoots: ['**/AGENTS.md', '**/.agents/**', '**/.trae/skills/**', '**/.entro/**'],
-    },
-    list: {
-      label: '商品列表',
-      primaryRoots: [toRepoRelative(context, path.join(context.appRoot, 'src/pages/list'))],
-      excludeRoots: ['**/AGENTS.md', '**/.agents/**', '**/.trae/skills/**', '**/.entro/**'],
-    },
-    tracking: {
-      label: '商品埋点',
-      primaryRoots: [toRepoRelative(context, context.appRoot), 'packages/goods-sdk'],
-      excludeRoots: ['**/AGENTS.md', '**/.agents/**', '**/.trae/skills/**', '**/.entro/**'],
-    },
-  };
-
   let changed = false;
   const scopes = config.scopes.map(scope => {
-    const nextId = normalizeScopeId(scope.id);
-    const preset = defaults[nextId];
-    if (!preset) {
-      return {
-        ...scope,
-        id: nextId,
-      };
-    }
-
-    const merged = {
+    const normalizedScope = {
       ...scope,
-      id: nextId,
-      label: preset.label,
-      primaryRoots: preset.primaryRoots,
-      excludeRoots: preset.excludeRoots,
+      id: normalizeScopeId(scope.id),
+      label: scope.label || scope.id,
+      paths: normalizeArray(scope.paths),
+      primaryRoots: normalizeArray(scope.primaryRoots).length ? normalizeArray(scope.primaryRoots) : normalizeArray(scope.paths),
+      excludeRoots: normalizeArray(scope.excludeRoots).length
+        ? normalizeArray(scope.excludeRoots)
+        : ['**/AGENTS.md', '**/.agents/**', '**/.trae/skills/**', '**/.entro/**'],
     };
 
-    if (JSON.stringify(merged) !== JSON.stringify(scope)) {
+    if (JSON.stringify(normalizedScope) !== JSON.stringify(scope)) {
       changed = true;
     }
 
-    return merged;
+    return normalizedScope;
   });
 
   if (changed) {
@@ -343,7 +379,8 @@ function syncOpenQuestionsReport(context) {
     });
   }
 
-  writeText(path.join(context.paths.publications, 'questions.todo.md'), lines.join('\n'));
+  ensureDir(path.join(context.paths.runtime, 'hitl'));
+  writeText(path.join(context.paths.runtime, 'hitl', 'questions.todo.md'), lines.join('\n'));
 }
 
 function ensureBuiltinPrompts() {
@@ -396,19 +433,23 @@ function ensureBuiltinPrompts() {
     '4. 如果默认路径不确定，必须通过 question 表达不确定性，不能伪装成确定规则。',
     '5. 结论、问题、卡片正文全部使用中文。',
   ].join('\n'));
+
+  writeTextIfAbsent(path.join(promptsDir, 'artifact_consolidation.md'), [
+    '你是仓库经验产物归纳 agent。',
+    '任务：只基于输入中的 cards、openQuestions、源码目录快照和 source 路径，归纳出最终面向研发可消费的 AGENTS.md 与通用 skills。',
+    '要求：',
+    '1. 不能预设 skill 分类，不要套固定 taxonomy，必须从输入证据归纳。',
+    '2. skills 必须是跨页面、跨模块可复用的实现模式；如果某条经验只在单一页面成立，不要升级成通用 skill。',
+    '3. AGENTS.md 必须是项目级画像和规范，不要与 skill 重复，不要写成经验卡片拼接。',
+    '4. 严禁使用 AGENTS、skills、.entro 产物作为证据来源；只能使用输入中提供的 cards、questions、source paths、app scan 信息。',
+    '5. 如果某类模式证据不足以支撑“通用经验”，宁可不产出，也不要强行泛化。',
+    '6. 输出必须严格符合 schema，只返回 JSON，不要解释。',
+    '7. 所有标题、正文、问题都使用中文。',
+  ].join('\n'));
 }
 
 function normalizeScopeId(value) {
-  if (value === 'goods.publish') {
-    return 'publish';
-  }
-  if (value === 'goods.list') {
-    return 'list';
-  }
-  if (value === 'goods.tracking') {
-    return 'tracking';
-  }
-  return value;
+  return String(value || '').trim() || 'app';
 }
 
 function migrateLegacyEntroLayout(context) {
@@ -479,6 +520,7 @@ export {
   ensureOperationalSubdirs,
   clearGeneratedCandidateState,
   clearGeneratedOpenQuestions,
+  clearScopeGeneratedState,
   migrateConfigFile,
   migrateScopesConfig,
   migrateProvidersConfig,

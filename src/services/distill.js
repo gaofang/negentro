@@ -222,7 +222,7 @@ function buildEvidenceBundleForScope(context, scope, sources, helpers) {
   if (typeof filterSourcesForScope !== 'function') {
     throw new TypeError(`filterSourcesForScope is not a function; helper keys=${Object.keys(helpers || {}).join(',')}`);
   }
-  return filterSourcesForScope(sources, scope)
+  return rankSourcesForDistillation(filterSourcesForScope(sources, scope), scope)
     .slice(0, AGENT_EVIDENCE_LIMIT)
     .map(source => buildEvidenceEntry(context, source.path));
 }
@@ -239,6 +239,79 @@ function buildEvidenceEntry(context, relativePath) {
     path: relativePath,
     excerpt: readFileExcerpt(absolutePath),
   };
+}
+
+function rankSourcesForDistillation(sources, scope) {
+  return normalizeArray(sources)
+    .slice()
+    .sort((left, right) => scoreSourceForDistillation(right, scope) - scoreSourceForDistillation(left, scope));
+}
+
+function scoreSourceForDistillation(source, scope) {
+  const relativePath = String(source && source.path ? source.path : '');
+  const scopeId = String(scope && scope.id ? scope.id : '');
+  let score = 0;
+
+  if (relativePath.includes('/src/')) {
+    score += 100;
+  }
+  if (relativePath.endsWith('.tsx') || relativePath.endsWith('.ts') || relativePath.endsWith('.jsx') || relativePath.endsWith('.js')) {
+    score += 30;
+  }
+  if (relativePath.includes('/pages/')) {
+    score += 18;
+  }
+  if (relativePath.includes('/components/')) {
+    score += 16;
+  }
+  if (relativePath.includes('/biz-components/')) {
+    score += 16;
+  }
+  if (relativePath.includes('/hooks/')) {
+    score += 12;
+  }
+  if (relativePath.includes('/utils/')) {
+    score += 8;
+  }
+  if (relativePath.includes('/api')) {
+    score += 8;
+  }
+  if (relativePath.includes(`/${scopeId}/`)) {
+    score += 6;
+  }
+
+  if (relativePath.endsWith('.scss') || relativePath.endsWith('.css') || relativePath.endsWith('.less')) {
+    score -= 20;
+  }
+  if (relativePath.endsWith('.md') || relativePath.endsWith('.mdx') || relativePath.endsWith('.txt')) {
+    score -= 10;
+  }
+  if (relativePath.endsWith('.json')) {
+    score -= 16;
+  }
+  if (relativePath.endsWith('.d.ts')) {
+    score -= 90;
+  }
+  if (relativePath.includes('/.vmok/')) {
+    score -= 120;
+  }
+  if (relativePath.includes('/config/')) {
+    score -= 18;
+  }
+  if (relativePath.endsWith('/config.ts') || relativePath.endsWith('/config.js')) {
+    score -= 20;
+  }
+  if (relativePath.endsWith('/package.json')) {
+    score -= 30;
+  }
+  if (relativePath.includes('edenx.config') || relativePath.includes('eden.pipeline') || relativePath.endsWith('scm_build.sh') || relativePath.endsWith('gitlab-ci.sh')) {
+    score -= 40;
+  }
+  if (relativePath.startsWith('packages/') && !relativePath.includes('/src/')) {
+    score -= 12;
+  }
+
+  return score;
 }
 
 function readFileExcerpt(absolutePath) {
@@ -481,27 +554,28 @@ function inferTopicsAndPatternsFromCards(cards, scopes) {
       return;
     }
 
-    const topicId = `topic_${card.meta.id.replace(/^kc_/, '')}`;
+    const baseId = deriveEntityStem(card.meta.id);
+    const topicId = `topic-${baseId}`;
     topics.push({
       schemaVersion: 1,
       id: topicId,
       scope: scope.id,
-      title: card.body.title,
+      title: card.meta.title,
       why_it_matters: card.body.sections.problem,
-      evidence_refs_primary: normalizeArray(card.body.evidence),
+      evidence_refs_primary: normalizeArray(card.meta.evidenceRefs),
       changed_files: [],
       confidence: Number(card.meta.confidence || 0.6),
     });
 
     patterns.push({
       schemaVersion: 1,
-      id: `pattern_${card.meta.id.replace(/^kc_/, '')}`,
+      id: `pattern-${baseId}`,
       topic_id: topicId,
       scope: scope.id,
-      title: card.body.title,
+      title: card.meta.title,
       pattern_kind: card.meta.kind === 'workflow' ? 'workflow' : 'rule',
       statement: card.body.sections.recommendation,
-      evidenceRefsPrimary: normalizeArray(card.body.evidence),
+      evidenceRefsPrimary: normalizeArray(card.meta.evidenceRefs),
       confidence: Number(card.meta.confidence || 0.6),
       uncertainty: {
         requiresHuman: false,
@@ -514,6 +588,15 @@ function inferTopicsAndPatternsFromCards(cards, scopes) {
     topics,
     patterns,
   };
+}
+
+function deriveEntityStem(cardId) {
+  return String(cardId || '')
+    .replace(/^card-/, '')
+    .replace(/^kc_/, '')
+    .replace(/[^a-zA-Z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'derived';
 }
 
 export {

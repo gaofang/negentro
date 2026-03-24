@@ -312,7 +312,7 @@ function enrichCommand(context, options, helpers) {
     });
   });
 
-  writeJson(path.join(context.paths.publications, 'reports', 'latest-enrichment-report.json'), {
+  writeJson(path.join(context.paths.runtime, 'reports', 'latest-enrichment-report.json'), {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     enrichedCardIds: Array.from(enrichedCards),

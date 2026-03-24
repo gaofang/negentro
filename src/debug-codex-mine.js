@@ -11,8 +11,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function main() {
   const options = parseOptions(process.argv.slice(2));
-  const app = options.app || 'apps/goods/ffa-goods';
-  const scopeId = options.scope || 'publish';
+  const app = options.app || process.cwd();
+  const scopeId = options.scope || 'app';
   const run = options.run === true || options.run === 'true';
   const noSchema = options['no-schema'] === true || options['no-schema'] === 'true';
   const evidenceLimit = Number(options['evidence-limit'] || 18);

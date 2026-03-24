@@ -230,17 +230,14 @@ function inferSourceRole(relativePath) {
 }
 
 function inferScopeHints(relativePath) {
-  const hints = [];
-  if (relativePath.includes(`${path.sep}create`) || relativePath.includes('publish')) {
-    hints.push('publish');
-  }
-  if (relativePath.includes(`${path.sep}list${path.sep}`)) {
-    hints.push('list');
-  }
-  if (relativePath.includes('tea') || relativePath.includes('tracking')) {
-    hints.push('tracking');
-  }
-  return Array.from(new Set(hints));
+  const segments = relativePath.split(path.sep).filter(Boolean);
+  return Array.from(
+    new Set(
+      segments
+        .filter(segment => /^[a-z0-9_-]{2,40}$/i.test(segment))
+        .slice(-3),
+    ),
+  );
 }
 
 function scanCommand(context, options, helpers) {
