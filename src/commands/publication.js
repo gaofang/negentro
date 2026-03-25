@@ -22,6 +22,8 @@ async function consolidateCommand(context, options, helpers) {
     persistAgentRun,
     renderConsolidatedQuestions,
     buildConsolidationOutputPaths,
+    buildPublicationModel,
+    applyPublicationModel,
   } = helpers;
 
   ensureInitialized(context);
@@ -56,16 +58,15 @@ async function consolidateCommand(context, options, helpers) {
 
   removeLegacyConsolidationOutputs(context);
   removeUnexpectedOutputArtifacts(context);
-  resetDirectoryContents(outputPaths.skillDir);
   ensureDir(path.dirname(outputPaths.report));
   ensureDir(path.dirname(outputPaths.questionsReport));
-  writeText(outputPaths.agents, renderAgentsDocument(normalized.agentsDocument));
-  ensureDir(outputPaths.skillDir);
-  normalized.skills.forEach(skill => {
-    const skillDir = path.join(outputPaths.skillDir, skill.id);
-    ensureDir(skillDir);
-    writeText(path.join(skillDir, 'SKILL.md'), renderSkillDocument(skill));
+
+  const publicationModel = buildPublicationModel(normalized);
+  const publicationDiff = applyPublicationModel(context, publicationModel, {
+    renderAgentsDocument,
+    renderSkillDocument,
   });
+
   resetDirectoryContents(outputPaths.questionsDir);
   ensureDir(outputPaths.questionsDir);
   consolidatedQuestions.forEach(question => {
@@ -113,6 +114,9 @@ async function consolidateCommand(context, options, helpers) {
   console.log(`[entro] 已生成最终产物：1 份 AGENTS.md、${normalized.skills.length} 个 skills；另收敛 ${consolidatedQuestions.length} 个待确认问题`);
   console.log(`[entro] AGENTS: ${outputPaths.agents}`);
   console.log(`[entro] skills: ${outputPaths.skillDir}`);
+  console.log(
+    `[entro] 最小化更新：AGENTS ${publicationDiff.agents.changed ? 'updated' : 'unchanged'}；skills added ${publicationDiff.skills.added.length}, updated ${publicationDiff.skills.updated.length}, removed ${publicationDiff.skills.removed.length}, unchanged ${publicationDiff.skills.unchanged.length}`
+  );
 }
 
 function normalizeStatuses(value) {

@@ -21,12 +21,12 @@ import {
 
 function initCommand(context) {
   ensureDir(context.entroRoot);
+  ensureDir(context.configRoot);
 
   [
-    context.systemRoot,
+    context.runtimeRoot,
     context.outputRoot,
     context.paths.config,
-    path.join(context.paths.config, 'prompts'),
     path.join(context.paths.evidence, 'catalog'),
     path.join(context.paths.evidence, 'repo-scan'),
     path.join(context.paths.evidence, 'code'),
@@ -70,6 +70,7 @@ function initCommand(context) {
     path.join(context.paths.runtime, 'seeds', 'evidence'),
     path.join(context.paths.runtime, 'seeds', 'distilled'),
     path.join(context.paths.runtime, 'seeds', 'resolved'),
+    context.paths.publicationState,
   ].forEach(ensureDir);
 
   writeJsonIfAbsent(path.join(context.paths.config, 'entro.config.json'), {
@@ -165,8 +166,9 @@ function initCommand(context) {
       '',
       '这里保存当前应用的 entro 状态与产物。',
       '',
-      '- `system/`：系统内部状态、中间产物、证据和运行记录',
+      '- `config/`：业务可维护配置，如自定义 seeds',
       '- `output/`：对业务研发和生码 agent 可直接消费的最终 AGENTS/skills 产物',
+      '- 运行态、中间产物与调试信息默认存放在本机 runtime 目录，可通过 `entro paths` 查看',
     ].join('\n'),
   );
 

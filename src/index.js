@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 
 import { answerCommand, enrichCommand, questionCommand, reconcileCommand, reviewCommand } from './commands/hitl.js';
 import { discoverCommand, distillCommand, mineCommand } from './commands/mining.js';
@@ -69,6 +70,10 @@ import {
   renderSkillDocument,
   renderConsolidatedQuestions,
 } from './services/consolidation.js';
+import {
+  buildPublicationModel,
+  applyPublicationModel,
+} from './services/publication-state.js';
 import {
   buildSeedExtractionInput,
   buildSeedExtractionSchema,
@@ -168,6 +173,8 @@ async function run(argv) {
         persistAgentRun,
         renderConsolidatedQuestions,
         buildConsolidationOutputPaths,
+        buildPublicationModel,
+        applyPublicationModel,
       });
     case 'run':
       return runCommand(context, options, {
@@ -243,8 +250,14 @@ async function run(argv) {
           persistAgentRun,
           renderConsolidatedQuestions,
           buildConsolidationOutputPaths,
+          buildPublicationModel,
+          applyPublicationModel,
         },
       });
+    case 'paths':
+      return printPaths(context);
+    case 'clean':
+      return cleanCommand(context, options);
     case 'scan':
       return runScanCommand(context, options, {
         ensureInitialized,
@@ -500,16 +513,24 @@ function ensureInitialized(context) {
     throw new Error('entro context is invalid');
   }
 
-  if (!fs.existsSync(context.entroRoot)) {
+  if (!fs.existsSync(context.entroRoot) || !hasAnyInitializationState(context)) {
     throw new Error('entro is not initialized. Run `entro init` first.');
   }
 }
 
 function ensureInitializedOrInit(context, runner) {
-  if (!fs.existsSync(context.entroRoot)) {
+  if (!fs.existsSync(context.entroRoot) || !hasAnyInitializationState(context)) {
     initCommand(context);
   }
   return runner();
+}
+
+function hasAnyInitializationState(context) {
+  return (
+    fs.existsSync(context.configRoot) ||
+    fs.existsSync(path.join(context.legacySystemRoot, 'config')) ||
+    fs.existsSync(path.join(context.entroRoot, 'config'))
+  );
 }
 
 function printHelp() {
@@ -521,6 +542,8 @@ function printHelp() {
       '  question [list|ask --id <questionId>]',
       '  build',
       '  run',
+      '  paths',
+      '  clean [--all]',
       '',
       '调试命令：',
       '  scan [--scope <scope>] [--changed-only --base <ref>]',
@@ -536,6 +559,31 @@ function printHelp() {
       '  publish [--dry-run]',
       '  diff',
     ].join('\n'),
+  );
+}
+
+function printPaths(context) {
+  console.log(
+    [
+      '[entro] paths',
+      `  app: ${context.appRoot}`,
+      `  config: ${context.configRoot}`,
+      `  output: ${context.outputRoot}`,
+      `  runtime: ${context.runtimeRoot}`,
+    ].join('\n'),
+  );
+}
+
+function cleanCommand(context, options) {
+  if (fs.existsSync(context.runtimeRoot)) {
+    fs.rmSync(context.runtimeRoot, { recursive: true, force: true });
+  }
+  if (options.all && fs.existsSync(context.outputRoot)) {
+    fs.rmSync(context.outputRoot, { recursive: true, force: true });
+  }
+
+  console.log(
+    `[entro] cleaned ${options.all ? 'runtime + output' : 'runtime'} for ${context.appRoot}`
   );
 }
 

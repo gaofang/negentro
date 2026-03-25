@@ -492,8 +492,10 @@ function normalizeScopeId(value) {
 }
 
 function migrateLegacyEntroLayout(context) {
+  migrateLegacyConfigDirectory(context);
+  migrateLegacySystemDirectory(context);
+
   const legacyDirectories = [
-    'config',
     'evidence',
     'cards',
     'questions',
@@ -539,6 +541,63 @@ function migrateLegacyEntroLayout(context) {
       copyDirectory(legacySyncPlans, nextSyncPlans);
     }
   }
+}
+
+function migrateLegacyConfigDirectory(context) {
+  const rootLegacyConfig = path.join(context.entroRoot, 'config');
+  if (fs.existsSync(rootLegacyConfig) && !fs.existsSync(context.configRoot)) {
+    ensureDir(path.dirname(context.configRoot));
+    fs.renameSync(rootLegacyConfig, context.configRoot);
+    return;
+  }
+  if (fs.existsSync(rootLegacyConfig)) {
+    copyDirectory(rootLegacyConfig, context.configRoot);
+  }
+
+  const legacyConfig = path.join(context.legacySystemRoot, 'config');
+  if (!fs.existsSync(legacyConfig)) {
+    return;
+  }
+  if (!fs.existsSync(context.configRoot)) {
+    ensureDir(path.dirname(context.configRoot));
+    fs.renameSync(legacyConfig, context.configRoot);
+    return;
+  }
+  copyDirectory(legacyConfig, context.configRoot);
+}
+
+function migrateLegacySystemDirectory(context) {
+  if (!fs.existsSync(context.legacySystemRoot)) {
+    return;
+  }
+
+  const runtimeDirectories = [
+    'evidence',
+    'tasks',
+    'candidates',
+    'cards',
+    'questions',
+    'answers',
+    'snapshots',
+    'runs',
+    'drift',
+    'eval',
+    'runtime',
+  ];
+
+  runtimeDirectories.forEach(name => {
+    const sourcePath = path.join(context.legacySystemRoot, name);
+    const targetPath = path.join(context.runtimeRoot, name);
+    if (!fs.existsSync(sourcePath)) {
+      return;
+    }
+    if (!fs.existsSync(targetPath)) {
+      ensureDir(path.dirname(targetPath));
+      fs.renameSync(sourcePath, targetPath);
+      return;
+    }
+    copyDirectory(sourcePath, targetPath);
+  });
 }
 
 function copyDirectory(source, target) {
