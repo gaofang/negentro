@@ -436,7 +436,7 @@ function ensureBuiltinPrompts() {
 
   writeTextIfAbsent(path.join(promptsDir, 'artifact_consolidation.md'), [
     '你是仓库经验产物归纳 agent。',
-    '任务：只基于输入中的 cards、openQuestions、源码目录快照、source paths、package.json 信息，归纳出最终面向研发可消费的 AGENTS.md 与通用 skills。',
+    '任务：只基于输入中的 resolvedSeeds、cards、openQuestions、源码目录快照、source paths、package.json 信息，归纳出最终面向研发可消费的 AGENTS.md 与通用 skills。',
     '要求：',
     '1. 不能预设 skill 分类，不要套固定 taxonomy，必须从输入证据归纳。',
     '2. skills 必须是跨页面、跨模块可复用的实现模式；如果某条经验只在单一页面成立，不要升级成通用 skill。',
@@ -445,6 +445,9 @@ function ensureBuiltinPrompts() {
     '5. 如果某类模式证据不足以支撑“通用经验”，宁可不产出，也不要强行泛化。',
     '6. 输出必须严格符合 schema，只返回 JSON，不要解释。',
     '7. 所有标题、正文、问题都使用中文。',
+    '8. resolvedSeeds 是一级输入：如果某个模式已经通过种子抽取被明确解析，优先以 resolvedSeeds 为准，再用 cards/source paths 补充证据和边界。',
+    '9. requiredResolvedSeeds 是最高优先级输入：这些是“AI 不能猜错的固定开发模式”，最终 skills 必须优先覆盖它们；不要被页面型 cards 冲淡。',
+    '10. 对于已经在 resolvedSeeds 中明确给出默认规则的模式，优先直接生成面向生码的 skill；只有当它明显只是单页案例时才放弃。',
     '',
     'AGENTS.md 生成目标：为单个 Monorepo 子项目生成完整的 Project Rules 文档，帮助团队统一开发标准。',
     'AGENTS.md 必须优先覆盖以下内容：',
@@ -464,6 +467,23 @@ function ensureBuiltinPrompts() {
     '2. skill 标题应该描述“实现模式”，不要直接使用页面名、业务名、具体模块名作为标题主体。',
     '3. 推荐做法必须能指导后续生码 agent 编码，既要可执行，也要避免伪泛化。',
     '4. skill 与 AGENTS.md 要分工明确：AGENTS.md 讲项目规则，skill 讲具体实现模式。',
+    '5. 如果 resolvedSeeds 中已经给出了默认规则、Do、Don\'t、snippet，应优先转化为 skill 内容，而不是重新发明另一套表述。',
+    '6. 最终 skill 应尽量包含：适用问题、默认推荐、Do、Don\'t、最小代码片段、适用边界、验证清单、取证来源。',
+    '7. 优先产出“固定开发模式”skill，例如：HTTP 请求入口、接口分层、错误/埋点上报、弹窗默认打开方式、搜索列表默认骨架、权限接入方式；谨慎产出某个页面流转套路。',
+    '8. 如果一个候选 skill 的取证来源主要集中在单一页面目录，默认不要产出。',
+  ].join('\n'));
+
+  writeTextIfAbsent(path.join(promptsDir, 'seed_extraction.md'), [
+    '你是固定开发模式提取 agent。',
+    '任务：围绕输入中的一个 seed 问题，只基于给定代码证据、相关 cards 和项目上下文，提取当前项目关于该问题的默认开发模式。',
+    '要求：',
+    '1. 必须先判断该问题在当前项目中是否存在稳定默认路径。',
+    '2. 如果存在稳定默认路径，输出 resolved，并给出默认规则、Do、Don\'t、最小代码片段、适用边界和取证来源。',
+    '3. 如果候选模式并存且无法确定默认路径，输出 needs_human，并把候选模式收敛成一个单选确认问题。',
+    '4. 如果该问题在当前项目中缺乏相关证据，输出 unsupported，不要强行编造答案。',
+    '5. 严禁发明私有 API、私有组件名或 import path；所有结论都必须能被 evidenceRefs 支撑。',
+    '6. 输出必须严格符合 schema，只返回 JSON，不要解释。',
+    '7. 所有标题、正文、问题、选项都使用中文。',
   ].join('\n'));
 }
 

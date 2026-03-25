@@ -55,18 +55,19 @@ async function consolidateCommand(context, options, helpers) {
   const outputPaths = buildConsolidationOutputPaths(context);
 
   removeLegacyConsolidationOutputs(context);
+  removeUnexpectedOutputArtifacts(context);
   resetDirectoryContents(outputPaths.skillDir);
-  resetDirectoryContents(outputPaths.questionsDir);
   ensureDir(path.dirname(outputPaths.report));
   ensureDir(path.dirname(outputPaths.questionsReport));
   writeText(outputPaths.agents, renderAgentsDocument(normalized.agentsDocument));
   ensureDir(outputPaths.skillDir);
-  ensureDir(outputPaths.questionsDir);
   normalized.skills.forEach(skill => {
     const skillDir = path.join(outputPaths.skillDir, skill.id);
     ensureDir(skillDir);
     writeText(path.join(skillDir, 'SKILL.md'), renderSkillDocument(skill));
   });
+  resetDirectoryContents(outputPaths.questionsDir);
+  ensureDir(outputPaths.questionsDir);
   consolidatedQuestions.forEach(question => {
     writeJson(path.join(outputPaths.questionsDir, `${question.id}.json`), createConsolidatedQuestionDocument(question));
   });
@@ -109,7 +110,9 @@ async function consolidateCommand(context, options, helpers) {
     })),
   });
 
-  console.log(`[entro] 已归并 ${cards.length} 张卡片，生成 1 份 AGENTS 草案、${normalized.skills.length} 个 skill 草案，并收敛 ${consolidatedQuestions.length} 个待确认问题`);
+  console.log(`[entro] 已生成最终产物：1 份 AGENTS.md、${normalized.skills.length} 个 skills；另收敛 ${consolidatedQuestions.length} 个待确认问题`);
+  console.log(`[entro] AGENTS: ${outputPaths.agents}`);
+  console.log(`[entro] skills: ${outputPaths.skillDir}`);
 }
 
 function normalizeStatuses(value) {
@@ -154,6 +157,28 @@ function removeLegacyConsolidationOutputs(context) {
     } else {
       fs.unlinkSync(targetPath);
     }
+  });
+}
+
+function removeUnexpectedOutputArtifacts(context) {
+  const outputRoot = context.paths.publications;
+  const targets = [
+    path.join(outputRoot, 'questions.todo.md'),
+    path.join(outputRoot, 'reports'),
+    path.join(outputRoot, 'questions-consolidated.md'),
+    path.join(outputRoot, 'questions-consolidated'),
+  ];
+
+  targets.forEach(targetPath => {
+    if (!fs.existsSync(targetPath)) {
+      return;
+    }
+    const stat = fs.statSync(targetPath);
+    if (stat.isDirectory()) {
+      fs.rmSync(targetPath, { recursive: true, force: true });
+      return;
+    }
+    fs.unlinkSync(targetPath);
   });
 }
 

@@ -14,10 +14,14 @@ function buildConsolidationInput(context, cards, openQuestions) {
     { sources: [] };
 
   const appSourcePaths = normalizeArray(sourceCatalog.sources)
+    .filter(item => item && item.evidence_class === 'primary')
     .map(item => item && item.path)
     .filter(Boolean)
+    .filter(isAllowedEvidencePath)
     .filter(item => item.startsWith(path.relative(context.repoRoot, context.appRoot)))
     .slice(0, 400);
+  const resolvedSeeds = readResolvedSeeds(context);
+  const requiredResolvedSeeds = resolvedSeeds.filter(seed => seed.priority === 'required' || seed.source !== 'optional');
 
   return {
     app: {
@@ -41,13 +45,21 @@ function buildConsolidationInput(context, cards, openQuestions) {
       confidence: Number(card.meta.confidence || 0),
       scopePaths: normalizeArray(card.meta.scopePaths),
       ownerHints: normalizeArray(card.meta.ownerHints),
-      evidenceRefs: normalizeArray(card.meta.evidenceRefs),
+      evidenceRefs: filterEvidenceRefs(card.meta.evidenceRefs),
       sections: {
         problem: safeSection(card.body.sections, 'problem'),
         recommendation: safeSection(card.body.sections, 'recommendation'),
         boundary: safeSection(card.body.sections, 'boundary'),
       },
       notes: normalizeArray(card.body.notes),
+    })),
+    resolvedSeeds: resolvedSeeds.map(seed => ({
+      ...seed,
+      evidenceRefs: filterEvidenceRefs(seed.evidenceRefs),
+    })),
+    requiredResolvedSeeds: requiredResolvedSeeds.map(seed => ({
+      ...seed,
+      evidenceRefs: filterEvidenceRefs(seed.evidenceRefs),
     })),
     openQuestions: normalizeArray(openQuestions).map(question => ({
       id: question.meta.id,
@@ -62,6 +74,8 @@ function buildConsolidationInput(context, cards, openQuestions) {
     rules: {
       language: 'zh-CN',
       primaryGoal: '产出项目级 AGENTS.md 与跨页面可复用 skills',
+      preferResolvedSeedsAsPrimaryInput: true,
+      requiredSeedsMustWin: true,
       avoidPageSpecificSkills: true,
       avoidHardcodedTaxonomy: true,
       ignoreDerivedArtifactsAsEvidence: true,
@@ -109,6 +123,16 @@ function buildConsolidationSchema() {
             title: { type: 'string' },
             summary: { type: 'string' },
             applicability: { type: 'string' },
+            defaultRule: { type: 'string' },
+            dos: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            donts: {
+              type: 'array',
+              items: { type: 'string' },
+            },
+            snippet: { type: 'string' },
             preflight: {
               type: 'array',
               items: { type: 'string' },
@@ -134,8 +158,12 @@ function buildConsolidationSchema() {
               type: 'array',
               items: { type: 'string' },
             },
+            sourceSeedIds: {
+              type: 'array',
+              items: { type: 'string' },
+            },
           },
-          required: ['id', 'title', 'summary', 'applicability', 'preflight', 'steps', 'pitfalls', 'validation', 'boundaries', 'evidenceRefs', 'sourceCardIds'],
+          required: ['id', 'title', 'summary', 'applicability', 'defaultRule', 'dos', 'donts', 'snippet', 'preflight', 'steps', 'pitfalls', 'validation', 'boundaries', 'evidenceRefs', 'sourceCardIds', 'sourceSeedIds'],
         },
       },
       consolidatedQuestions: {
@@ -217,6 +245,32 @@ function renderSkillDocument(skill) {
     '',
   ];
 
+  if (skill.defaultRule) {
+    lines.push('## 默认推荐');
+    lines.push(skill.defaultRule);
+    lines.push('');
+  }
+
+  if (normalizeArray(skill.dos).length) {
+    lines.push('## Do');
+    normalizeArray(skill.dos).forEach(item => lines.push(`- ${item}`));
+    lines.push('');
+  }
+
+  if (normalizeArray(skill.donts).length) {
+    lines.push('## Don\'t');
+    normalizeArray(skill.donts).forEach(item => lines.push(`- ${item}`));
+    lines.push('');
+  }
+
+  if (skill.snippet) {
+    lines.push('## 最小代码片段');
+    lines.push('```ts');
+    lines.push(skill.snippet);
+    lines.push('```');
+    lines.push('');
+  }
+
   if (normalizeArray(skill.preflight).length) {
     lines.push('## 前置判断');
     normalizeArray(skill.preflight).forEach(item => lines.push(`- ${item}`));
@@ -256,7 +310,7 @@ function normalizeConsolidationResult(parsed) {
     ? {
         title: parsed.agentsDocument.title,
         sections: normalizeArray(parsed.agentsDocument.sections),
-        evidenceRefs: uniqueBy(normalizeArray(parsed.agentsDocument.evidenceRefs), item => item),
+        evidenceRefs: filterEvidenceRefs(parsed.agentsDocument.evidenceRefs),
       }
     : null;
 
@@ -265,13 +319,18 @@ function normalizeConsolidationResult(parsed) {
     title: skill.title,
     summary: skill.summary,
     applicability: skill.applicability,
+    defaultRule: skill.defaultRule || '',
+    dos: normalizeArray(skill.dos),
+    donts: normalizeArray(skill.donts),
+    snippet: skill.snippet || '',
     preflight: normalizeArray(skill.preflight),
     steps: normalizeArray(skill.steps),
     pitfalls: normalizeArray(skill.pitfalls),
     validation: normalizeArray(skill.validation),
     boundaries: skill.boundaries,
-    evidenceRefs: uniqueBy(normalizeArray(skill.evidenceRefs), item => item),
+    evidenceRefs: filterEvidenceRefs(skill.evidenceRefs),
     sourceCardIds: uniqueBy(normalizeArray(skill.sourceCardIds), item => item),
+    sourceSeedIds: uniqueBy(normalizeArray(skill.sourceSeedIds), item => item),
   })).filter(skill => skill.id && skill.title && skill.evidenceRefs.length);
 
   const consolidatedQuestions = normalizeArray(parsed && parsed.consolidatedQuestions).map(question => ({
@@ -379,6 +438,75 @@ function listDirectories(root) {
     .filter(entry => entry.isDirectory())
     .map(entry => entry.name)
     .sort();
+}
+
+function readResolvedSeeds(context) {
+  const directory = path.join(context.paths.runtime, 'seeds', 'resolved');
+  if (!fs.existsSync(directory)) {
+    return [];
+  }
+
+  return fs.readdirSync(directory)
+    .filter(file => file.endsWith('.json'))
+    .map(file => readJson(path.join(directory, file)))
+    .map(document => document && document.result)
+    .filter(Boolean)
+    .map(result => ({
+      seedId: result.seedId,
+      headline: result.headline,
+      status: result.status,
+      summary: result.summary,
+      defaultRule: result.defaultRule,
+      do: normalizeArray(result.do),
+      dont: normalizeArray(result.dont),
+      snippet: result.snippet,
+      boundaries: result.boundaries,
+      evidenceRefs: filterEvidenceRefs(result.evidenceRefs),
+      priority: inferSeedPriority(context, result.seedId),
+      source: inferSeedSource(context, result.seedId),
+    }));
+}
+
+function inferSeedPriority(context, seedId) {
+  const seed = readMergedSeedById(context, seedId);
+  return seed && seed.priority ? seed.priority : 'required';
+}
+
+function inferSeedSource(context, seedId) {
+  const seed = readMergedSeedById(context, seedId);
+  return seed && seed.source ? seed.source : 'unknown';
+}
+
+function readMergedSeedById(context, seedId) {
+  const snapshot = readJson(path.join(context.paths.runtime, 'seeds', 'merged-seeds.json')) || {};
+  return normalizeArray(snapshot.seeds).find(item => item && item.id === seedId) || null;
+}
+
+function isAllowedEvidencePath(sourcePath) {
+  const normalized = String(sourcePath || '').replace(/\\/g, '/');
+  if (!normalized) {
+    return false;
+  }
+  if (normalized.includes('/.entro/')) {
+    return false;
+  }
+  if (normalized.includes('/.agents/')) {
+    return false;
+  }
+  if (normalized.includes('/.trae/skills/')) {
+    return false;
+  }
+  if (normalized.endsWith('/AGENTS.md') || normalized === 'AGENTS.md') {
+    return false;
+  }
+  return true;
+}
+
+function filterEvidenceRefs(items) {
+  return uniqueBy(
+    normalizeArray(items).filter(isAllowedEvidencePath),
+    item => item,
+  );
 }
 
 function safeSection(sections, key) {

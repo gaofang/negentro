@@ -10,7 +10,7 @@ function questionCommand(context, options, helpers) {
   ensureInitialized(context);
   migrateLegacyFiles(context);
 
-  const action = options._[0];
+  const action = (options._ && options._[0]) || 'list';
   if (!action || action === 'list') {
     return listQuestions(context, options, helpers);
   }

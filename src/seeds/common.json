@@ -1,0 +1,12 @@
+{
+  "required": [
+    "HTTP 请求封装方式\n业务封装的 get/post/request 方法名通常是私有的，AI 很难猜到默认入口。",
+    "接口定义文件约定\nservices、hooks、utils、api.ts 等层的职责边界如果判断错误，新增代码会放错层。",
+    "搜索列表页写法\n私有封装的 SearchTable / ProTable / Search 组件 API 往往无法从单文件稳定推断。",
+    "弹窗 / 抽屉打开方式\n命令式打开和 visible 状态驱动如果并存，需要确认默认路径和关闭收口方式。",
+    "全局 Toast / Message 调用\n项目里的统一反馈入口通常不是组件库原生 API，AI 容易直接调用 notification/message 原生能力。",
+    "按钮级权限写法\n权限控制可能是指令、hook、组件包装或 HOC，默认模式如果选错会直接影响可运行性。",
+    "错误 / 埋点上报方式\n异常上报和行为埋点通常接入私有 SDK，AI 不知道默认入口时会直接乱猜。",
+    "全局错误边界位置\nErrorBoundary 是根节点统一包裹还是 route 级包裹，会影响页面组件生成方式。"
+  ]
+}

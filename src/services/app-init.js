@@ -66,6 +66,10 @@ function initCommand(context) {
     path.join(context.paths.runtime, 'sync-plans'),
     path.join(context.paths.runtime, 'hitl'),
     path.join(context.paths.runtime, 'consolidation'),
+    path.join(context.paths.runtime, 'seeds'),
+    path.join(context.paths.runtime, 'seeds', 'evidence'),
+    path.join(context.paths.runtime, 'seeds', 'distilled'),
+    path.join(context.paths.runtime, 'seeds', 'resolved'),
   ].forEach(ensureDir);
 
   writeJsonIfAbsent(path.join(context.paths.config, 'entro.config.json'), {
@@ -162,7 +166,7 @@ function initCommand(context) {
       '这里保存当前应用的 entro 状态与产物。',
       '',
       '- `system/`：系统内部状态、中间产物、证据和运行记录',
-      '- `output/`：对业务研发可见的 AGENTS/skills 草案与报告',
+      '- `output/`：对业务研发和生码 agent 可直接消费的最终 AGENTS/skills 产物',
     ].join('\n'),
   );
 
