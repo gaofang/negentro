@@ -119,17 +119,25 @@ async function answerCommand(context, options, helpers) {
 
   writeJson(path.join(context.paths.answers, 'raw', `${answer.meta.id}.json`), answer);
 
-  question.meta.status = 'answered';
+  const isDeferredAnswer = isDeferredAnswerPayload(question, answerPayload);
+  question.meta.status = isDeferredAnswer ? 'deferred' : 'answered';
   question.meta.updatedAt = new Date().toISOString();
   question.body.answerRefs.push(answer.meta.id);
 
-  writeJson(path.join(context.paths.questions, 'answered', `${question.meta.id}.json`), question);
-  if (questionPath !== path.join(context.paths.questions, 'answered', `${question.meta.id}.json`)) {
+  const answerTargetPath = path.join(
+    context.paths.questions,
+    isDeferredAnswer ? 'deferred' : 'answered',
+    `${question.meta.id}.json`
+  );
+  writeJson(answerTargetPath, question);
+  if (questionPath !== answerTargetPath) {
     fs.unlinkSync(questionPath);
   }
   syncOpenQuestionsReport(context);
 
-  console.log(`[entro] 已记录回答 ${answer.meta.id}，对应问题 ${questionId}`);
+  console.log(
+    `[entro] 已记录回答 ${answer.meta.id}，对应问题 ${questionId}${isDeferredAnswer ? '（标记为跳过/暂不确定）' : ''}`
+  );
 }
 
 function reconcileCommand(context, options, helpers) {
@@ -144,6 +152,7 @@ function reconcileCommand(context, options, helpers) {
     promoteRelatedCardsToNeedsReview,
     syncOpenQuestionsReport,
     createFollowUpQuestion,
+    removeRelatedOpenFollowUpQuestions,
   } = helpers;
 
   ensureInitialized(context);
@@ -175,17 +184,19 @@ function reconcileCommand(context, options, helpers) {
   writeJson(path.join(context.paths.answers, 'normalized', `${answer.meta.id}.json`), normalized);
 
   const sufficient = normalized.judgement.sufficient;
-  question.meta.status = sufficient ? 'closed' : 'open';
+  const deferred = Boolean(normalized.judgement && normalized.judgement.deferred);
+  question.meta.status = sufficient ? 'closed' : deferred ? 'deferred' : 'open';
   question.meta.updatedAt = new Date().toISOString();
   question.body.reconciliation = {
     answerId: answer.meta.id,
     sufficient,
     missingFields: normalized.judgement.missingFields,
+    deferred,
   };
 
   const targetQuestionPath = path.join(
     context.paths.questions,
-    sufficient ? 'closed' : 'open',
+    sufficient ? 'closed' : deferred ? 'deferred' : 'open',
     `${question.meta.id}.json`
   );
   writeJson(targetQuestionPath, question);
@@ -194,10 +205,20 @@ function reconcileCommand(context, options, helpers) {
   }
 
   if (sufficient) {
+    const removedFollowUps = removeRelatedOpenFollowUpQuestions(context.paths.questions, questionId);
     const promoted = promoteRelatedCardsToNeedsReview(context, question);
     syncOpenQuestionsReport(context);
     console.log(
-      `[entro] 已对账 ${questionId}：信息已充分${promoted.length ? `，并提升 ${promoted.join(', ')} 到待评审` : '，暂无需要提升的卡片'}`
+      `[entro] 已对账 ${questionId}：信息已充分${removedFollowUps.length ? `，并清理 ${removedFollowUps.join(', ')} 等遗留追问` : ''}${promoted.length ? `，并提升 ${promoted.join(', ')} 到待评审` : '，暂无需要提升的卡片'}`
+    );
+    return;
+  }
+
+  if (deferred) {
+    const removedFollowUps = removeRelatedOpenFollowUpQuestions(context.paths.questions, questionId);
+    syncOpenQuestionsReport(context);
+    console.log(
+      `[entro] 已对账 ${questionId}：标记为暂不确定，当前轮次不再追问${removedFollowUps.length ? `，并清理 ${removedFollowUps.join(', ')} 等遗留追问` : ''}`
     );
     return;
   }
@@ -207,6 +228,11 @@ function reconcileCommand(context, options, helpers) {
   console.log(
     `[entro] 已对账 ${questionId}：仍缺少字段 ${normalized.judgement.missingFields.join(', ')}`
   );
+}
+
+function isDeferredAnswerPayload(question, answerPayload) {
+  const raw = String((answerPayload && answerPayload.selected) || (answerPayload && answerPayload.rawText) || '').trim().toLowerCase();
+  return ['skip', '跳过', '先跳过', 'pass', '不确定', '不知道', '暂不确定', 'uncertain', 'not sure'].includes(raw);
 }
 
 function reviewCommand(context, options, helpers) {

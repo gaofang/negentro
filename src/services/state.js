@@ -38,6 +38,7 @@ function ensureOperationalSubdirs(context) {
     path.join(context.paths.questions, 'open'),
     path.join(context.paths.questions, 'answered'),
     path.join(context.paths.questions, 'closed'),
+    path.join(context.paths.questions, 'deferred'),
     path.join(context.paths.answers, 'raw'),
     path.join(context.paths.answers, 'normalized'),
   ].forEach(ensureDir);

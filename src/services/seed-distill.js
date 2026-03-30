@@ -206,6 +206,40 @@ function writeResolvedSeed(context, result) {
 }
 
 function createSeedQuestionDocument(seed, result, relatedCards) {
+  const isUnsupportedBusinessRequired =
+    result.status === 'unsupported' &&
+    seed &&
+    seed.source === 'business' &&
+    seed.priority === 'required';
+
+  const expectedAnswer = isUnsupportedBusinessRequired
+    ? {
+        fields: ['补充代码位置或模块路径', '补充你期望抽取的默认模式'],
+      }
+    : {
+        mode: 'single_choice',
+        allowComment: true,
+        options: normalizeArray(result.question && result.question.options),
+      };
+
+  const prompt = isUnsupportedBusinessRequired
+    ? [
+        `当前项目里还无法仅凭现有证据提炼出“${seed.headline}”的稳定默认模式。`,
+        '请补充更具体的上下文，例如：',
+        '1. 相关代码位置、模块路径或组件名',
+        '2. 你期望系统抽取的默认做法是什么',
+        '3. 是否有一个可以作为标准参考的页面或实现',
+      ].join('\n')
+    : (
+        result.question && result.question.prompt
+          ? result.question.prompt
+          : `当前项目关于“${seed.headline}”的默认做法仍不明确，请确认推荐路径。`
+      );
+
+  const title = isUnsupportedBusinessRequired
+    ? `${seed.headline}（需要补充上下文）`
+    : (result.question && result.question.title ? result.question.title : `${seed.headline}（待确认）`);
+
   return {
     schemaVersion: 2,
     meta: {
@@ -228,16 +262,10 @@ function createSeedQuestionDocument(seed, result, relatedCards) {
       updatedAt: new Date().toISOString(),
     },
     body: {
-      title: result.question && result.question.title ? result.question.title : `${seed.headline}（待确认）`,
-      prompt: result.question && result.question.prompt
-        ? result.question.prompt
-        : `当前项目关于“${seed.headline}”的默认做法仍不明确，请确认推荐路径。`,
+      title,
+      prompt,
       background: result.summary || seed.rawText,
-      expectedAnswer: {
-        mode: 'single_choice',
-        allowComment: true,
-        options: normalizeArray(result.question && result.question.options),
-      },
+      expectedAnswer,
       rationale: `该问题来自种子“${seed.headline}”，如果默认路径判断错误，后续生码容易偏离项目约定。`,
       answerRefs: [],
       followUpFrom: null,

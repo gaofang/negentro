@@ -57,6 +57,29 @@ function getLastAnswerRef(question) {
 }
 
 function normalizeAnswer(question, answer) {
+  if (isSkippedAnswer(answer.body && answer.body.rawText, answer.body && answer.body.comment)) {
+    return {
+      schemaVersion: 2,
+      meta: {
+        id: answer.meta.id,
+        questionId: question.meta.id,
+        normalizedAt: new Date().toISOString(),
+      },
+      body: {
+        rawText: String((answer.body && answer.body.rawText) || '').trim(),
+        extracted: {
+          comment: String((answer.body && answer.body.comment) || '').trim(),
+          response_mode: 'deferred',
+        },
+      },
+      judgement: {
+        sufficient: false,
+        missingFields: [],
+        deferred: true,
+      },
+    };
+  }
+
   if (question.body.expectedAnswer && question.body.expectedAnswer.mode === 'single_choice') {
     return normalizeSingleChoiceAnswer(question, answer);
   }
@@ -95,6 +118,7 @@ function normalizeAnswer(question, answer) {
     judgement: {
       sufficient,
       missingFields: sufficient ? [] : missingFields,
+      deferred: false,
     },
   };
 }
@@ -102,6 +126,36 @@ function normalizeAnswer(question, answer) {
 function normalizeSingleChoiceAnswer(question, answer) {
   const options = normalizeArray(question.body.expectedAnswer && question.body.expectedAnswer.options);
   const selectedRaw = String(answer.body.selected || answer.body.rawText || '').trim();
+  const skipped = isSkippedAnswer(selectedRaw, answer.body.comment);
+
+  if (skipped) {
+    return {
+      schemaVersion: 2,
+      meta: {
+        id: answer.meta.id,
+        questionId: question.meta.id,
+        normalizedAt: new Date().toISOString(),
+      },
+      body: {
+        rawText: answer.body.rawText || selectedRaw,
+        selectedOptionId: null,
+        selectedOptionLabel: null,
+        comment: String(answer.body.comment || '').trim(),
+        extracted: {
+          selected_option_id: '',
+          selected_option_label: '',
+          comment: String(answer.body.comment || '').trim(),
+          response_mode: 'deferred',
+        },
+      },
+      judgement: {
+        sufficient: false,
+        missingFields: [],
+        deferred: true,
+      },
+    };
+  }
+
   const normalizedSelected = normalizeSingleChoiceValue(selectedRaw, options);
   const matchedOption = options.find(option => option.id === normalizedSelected) || null;
 
@@ -126,6 +180,7 @@ function normalizeSingleChoiceAnswer(question, answer) {
     judgement: {
       sufficient: Boolean(matchedOption),
       missingFields: matchedOption ? [] : ['selected_option_id'],
+      deferred: false,
     },
   };
 }
@@ -152,16 +207,28 @@ function normalizeSingleChoiceValue(rawValue, options) {
 function buildAnswerPayloadFromText(question, text) {
   const raw = String(text || '').trim();
   if (question.body.expectedAnswer && question.body.expectedAnswer.mode === 'single_choice') {
+    const lines = raw.split('\n').map(item => item.trim()).filter(Boolean);
+    const selected = lines[0] || '';
+    const commentLine = lines.slice(1).find(item => item.toLowerCase().startsWith('comment:'));
+    const comment = commentLine ? commentLine.slice('comment:'.length).trim() : '';
     return {
-      selected: raw,
-      comment: '',
+      selected,
+      comment,
       rawText: raw,
     };
   }
 
   return {
     rawText: raw,
+    comment: '',
   };
+}
+
+function isSkippedAnswer(rawValue, commentValue = '') {
+  const normalizedRaw = String(rawValue || '').trim().toLowerCase();
+  const normalizedComment = String(commentValue || '').trim().toLowerCase();
+  const skipTokens = ['skip', '跳过', '先跳过', 'pass', '不确定', '不知道', '暂不确定', 'uncertain', 'not sure'];
+  return skipTokens.includes(normalizedRaw) || skipTokens.includes(normalizedComment);
 }
 
 export {

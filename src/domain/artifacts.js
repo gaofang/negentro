@@ -464,6 +464,110 @@ function createFollowUpQuestion(context, question, normalized) {
   writeJson(path.join(context.paths.questions, 'open', `${followUp.meta.id}.json`), followUp);
 }
 
+function removeRelatedOpenFollowUpQuestions(questionsRoot, questionId) {
+  const openDir = path.join(questionsRoot, 'open');
+  if (!fs.existsSync(openDir)) {
+    return [];
+  }
+
+  const removed = collectOpenFollowUpDescendants(questionsRoot, questionId);
+  removed.forEach(descendantId => {
+    const filePath = path.join(openDir, `${descendantId}.json`);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  });
+  return removed;
+}
+
+function collectOpenFollowUpDescendants(questionsRoot, questionId) {
+  const openDir = path.join(questionsRoot, 'open');
+  if (!fs.existsSync(openDir)) {
+    return [];
+  }
+
+  const questions = fs.readdirSync(openDir)
+    .filter(file => file.endsWith('.json'))
+    .map(file => readJson(path.join(openDir, file)))
+    .filter(Boolean);
+
+  const descendants = [];
+  const queue = [questionId];
+
+  while (queue.length) {
+    const currentId = queue.shift();
+    questions.forEach(question => {
+      if (!question || !question.body || question.body.followUpFrom !== currentId) {
+        return;
+      }
+      const nextId = question.meta && question.meta.id;
+      if (!nextId || descendants.includes(nextId)) {
+        return;
+      }
+      descendants.push(nextId);
+      queue.push(nextId);
+    });
+  }
+
+  return descendants;
+}
+
+function getQuestionRootId(question, questionMap) {
+  let current = question;
+  const visited = new Set();
+
+  while (current && current.body && current.body.followUpFrom && !visited.has(current.meta && current.meta.id)) {
+    visited.add(current.meta && current.meta.id);
+    const parentId = current.body.followUpFrom;
+    current = questionMap.get(parentId) || null;
+    if (!current) {
+      return parentId;
+    }
+  }
+
+  return current && current.meta ? current.meta.id : question && question.meta ? question.meta.id : '';
+}
+
+function dedupeOpenQuestionsByRoot(questions, questionsRoot) {
+  const allQuestions = [];
+  QUESTION_STATUSES.forEach(status => {
+    const directory = path.join(questionsRoot, status);
+    if (!fs.existsSync(directory)) {
+      return;
+    }
+    fs.readdirSync(directory)
+      .filter(file => file.endsWith('.json'))
+      .forEach(file => {
+        const question = readJson(path.join(directory, file));
+        if (question) {
+          allQuestions.push(question);
+        }
+      });
+  });
+
+  const questionMap = new Map(allQuestions.map(question => [question.meta.id, question]));
+  const deduped = new Map();
+
+  normalizeArray(questions).forEach(question => {
+    const rootId = getQuestionRootId(question, questionMap);
+    const existing = deduped.get(rootId);
+    if (!existing) {
+      deduped.set(rootId, question);
+      return;
+    }
+
+    const existingDepth = String(existing.meta && existing.meta.id || '').split('_followup_').length;
+    const nextDepth = String(question.meta && question.meta.id || '').split('_followup_').length;
+    if (nextDepth < existingDepth) {
+      deduped.set(rootId, question);
+    }
+  });
+
+  return Array.from(deduped.values()).sort((left, right) =>
+    String(left.meta && left.meta.id || '').localeCompare(String(right.meta && right.meta.id || ''))
+  );
+}
+
 function normalizeQuestionDocument(question) {
   return question;
 }
@@ -557,7 +661,7 @@ function pickHighestCardStatus(statuses) {
 }
 
 function pickHighestQuestionStatus(statuses) {
-  const priority = ['closed', 'answered', 'open'];
+  const priority = ['closed', 'answered', 'deferred', 'open'];
   return (
     priority.find(status => normalizeArray(statuses).includes(status)) ||
     'open'
@@ -715,6 +819,8 @@ export {
   migrateLegacyCardDocument,
   promoteRelatedCardsToNeedsReview,
   createFollowUpQuestion,
+  removeRelatedOpenFollowUpQuestions,
+  dedupeOpenQuestionsByRoot,
   normalizeQuestionDocument,
   upsertMinedCard,
   upsertMinedQuestion,

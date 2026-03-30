@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
+import { chatTuiCommand } from './commands/chat-tui.js';
 import { answerCommand, enrichCommand, questionCommand, reconcileCommand, reviewCommand } from './commands/hitl.js';
 import { discoverCommand, distillCommand, mineCommand } from './commands/mining.js';
 import { consolidateCommand, diffCommand, publishCommand } from './commands/publication.js';
@@ -17,6 +18,8 @@ import {
   findCardPath,
   findQuestionPath,
   promoteRelatedCardsToNeedsReview,
+  removeRelatedOpenFollowUpQuestions,
+  dedupeOpenQuestionsByRoot,
   readAllCards,
   readCard,
   readCardsFromDirectory,
@@ -95,11 +98,19 @@ import { ensureDir, readJson, writeJson, writeText } from './shared/fs.js';
 import { createContext, DEFAULT_ROOT, toRepoRelative } from './context.js';
 
 async function run(argv) {
-  const [command = 'help', ...rest] = argv;
-  const options = parseOptions(rest);
-  const context = createContext(options.app || options.root || DEFAULT_ROOT);
+  const [firstToken, ...rest] = argv;
+  const firstLooksLikeOption = !firstToken || String(firstToken).startsWith('--');
+  const command = firstLooksLikeOption ? 'chat' : firstToken;
+  const optionTokens = firstLooksLikeOption ? argv : rest;
+  const options = parseOptions(optionTokens);
+  const enterChat = shouldEnterChatMode(firstToken, options);
+  const context = enterChat
+    ? (options.app || options.root ? createContext(options.app || options.root || DEFAULT_ROOT) : null)
+    : createContext(options.app || options.root || DEFAULT_ROOT);
 
   switch (command) {
+    case 'chat':
+      return chatTuiCommand(context, options, buildChatHelpers());
     case 'init':
       return initCommand(context);
     case 'extract':
@@ -403,6 +414,7 @@ async function run(argv) {
         promoteRelatedCardsToNeedsReview,
         syncOpenQuestionsReport,
         createFollowUpQuestion,
+        removeRelatedOpenFollowUpQuestions,
       });
     case 'review':
       return reviewCommand(context, options, {
@@ -474,7 +486,11 @@ async function run(argv) {
         writeJson,
       });
     case 'help':
+      return printHelp();
     default:
+      if (enterChat) {
+        return chatTuiCommand(context, options, buildChatHelpers());
+      }
       return printHelp();
   }
 }
@@ -533,10 +549,53 @@ function hasAnyInitializationState(context) {
   );
 }
 
+function shouldEnterChatMode(firstToken, options) {
+  const knownCommands = new Set([
+    'chat',
+    'init',
+    'extract',
+    'question',
+    'build',
+    'run',
+    'paths',
+    'clean',
+    'scan',
+    'classify-sources',
+    'discover',
+    'distill',
+    'mine',
+    'seed-plan',
+    'seed-extract',
+    'answer',
+    'reconcile',
+    'review',
+    'enrich',
+    'publish',
+    'consolidate',
+    'diff',
+    'help',
+  ]);
+
+  if (options['no-chat']) {
+    return false;
+  }
+
+  if (!firstToken) {
+    return true;
+  }
+
+  if (String(firstToken).startsWith('--')) {
+    return true;
+  }
+
+  return !knownCommands.has(firstToken);
+}
+
 function printHelp() {
   console.log(
     [
       'entro 主命令：',
+      '  chat',
       '  init',
       '  extract',
       '  question [list|ask --id <questionId>]',
@@ -544,6 +603,9 @@ function printHelp() {
       '  run',
       '  paths',
       '  clean [--all]',
+      '',
+      '直接执行 `entro` 或 `node packages/entro/src/cli.js --app <app>` 会进入安全文本对话模式。',
+      '如需启用 Ink 终端界面，请显式追加 `--tui`。',
       '',
       '调试命令：',
       '  scan [--scope <scope>] [--changed-only --base <ref>]',
@@ -585,6 +647,151 @@ function cleanCommand(context, options) {
   console.log(
     `[entro] cleaned ${options.all ? 'runtime + output' : 'runtime'} for ${context.appRoot}`
   );
+}
+
+function buildExtractHelpers() {
+  return {
+    ensureInitializedOrInit,
+    runScanCommand,
+    runClassifySourcesCommand,
+    seedPlanCommand,
+    seedExtractCommand,
+    scanHelpers: {
+      ensureInitialized,
+      migrateLegacyFiles,
+      writeJson,
+      toRepoRelative,
+    },
+    classifyHelpers: {
+      ensureInitialized,
+      migrateLegacyFiles,
+      readJson,
+      writeJson,
+      toRepoRelative,
+    },
+    seedPlanHelpers: {
+      ensureInitialized,
+      migrateLegacyFiles,
+      ensureSeedsConfig,
+      loadSeedRegistry,
+      writeMergedSeedsSnapshot,
+      activateSeeds,
+      writeActiveSeedsSnapshot,
+    },
+    seedExtractHelpers: {
+      ensureInitialized,
+      migrateLegacyFiles,
+      ensureSeedsConfig,
+      loadSeedRegistry,
+      activateSeeds,
+      readCardsFromDirectory,
+      loadDefaultProvider,
+      executeAgentTask,
+      buildAgentSummary,
+      persistAgentRun,
+      buildSeedExtractionInput,
+      buildSeedExtractionSchema,
+      normalizeSeedExtractionResult,
+      writeSeedDistillArtifacts,
+      writeResolvedSeed,
+      createSeedQuestionDocument,
+      writeJson,
+      syncOpenQuestionsReport,
+    },
+  };
+}
+
+function buildConsolidateHelpers() {
+  return {
+    ensureInitialized,
+    migrateLegacyFiles,
+    readCardsFromDirectory,
+    readJson,
+    buildConsolidationInput,
+    buildConsolidationSchema,
+    normalizeConsolidationResult,
+    renderAgentsDocument,
+    renderSkillDocument,
+    createConsolidatedQuestionDocument,
+    ensureDir,
+    writeText,
+    writeJson,
+    loadDefaultProvider,
+    executeAgentTask,
+    buildAgentSummary,
+    persistAgentRun,
+    renderConsolidatedQuestions,
+    buildConsolidationOutputPaths,
+    buildPublicationModel,
+    applyPublicationModel,
+  };
+}
+
+function buildRunHelpers() {
+  return {
+    ensureInitializedOrInit,
+    extractCommand,
+    consolidateCommand,
+    extractHelpers: buildExtractHelpers(),
+    buildHelpers: buildConsolidateHelpers(),
+  };
+}
+
+function buildAnswerHelpers() {
+  return {
+    ensureInitialized,
+    migrateLegacyFiles,
+    findQuestionPath,
+    readJson,
+    buildAnswerPayloadFromText,
+    promptForAnswer,
+    createAnswer,
+    writeJson,
+    syncOpenQuestionsReport,
+  };
+}
+
+function buildReconcileHelpers() {
+  return {
+    ensureInitialized,
+    migrateLegacyFiles,
+    findQuestionPath,
+    readJson,
+    getLastAnswerRef,
+    normalizeAnswer,
+    writeJson,
+    promoteRelatedCardsToNeedsReview,
+    syncOpenQuestionsReport,
+    createFollowUpQuestion,
+    removeRelatedOpenFollowUpQuestions,
+  };
+}
+
+function buildChatHelpers() {
+  return {
+    ensureInitialized,
+    ensureInitializedOrInit,
+    migrateLegacyFiles,
+    readJson,
+    findQuestionPath,
+    dedupeOpenQuestionsByRoot,
+    writeJson,
+    ensureSeedsConfig,
+    loadSeedRegistry,
+    activateSeeds,
+    printPaths,
+    cleanCommand,
+    extractCommand,
+    consolidateCommand,
+    runCommand,
+    answerCommand,
+    reconcileCommand,
+    extractHelpers: buildExtractHelpers(),
+    buildHelpers: buildConsolidateHelpers(),
+    runHelpers: buildRunHelpers(),
+    answerHelpers: buildAnswerHelpers(),
+    reconcileHelpers: buildReconcileHelpers(),
+  };
 }
 
 export { run };

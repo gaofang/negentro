@@ -5,7 +5,7 @@ export const ENTRO_DIR = '.entro';
 export const SYSTEM_DIR = 'system';
 export const OUTPUT_DIR = 'output';
 export const CARD_STATUSES = ['draft', 'needs-human', 'needs-review', 'approved', 'rejected', 'deprecated'];
-export const QUESTION_STATUSES = ['open', 'answered', 'closed'];
+export const QUESTION_STATUSES = ['open', 'answered', 'closed', 'deferred'];
 export const DEFAULT_IGNORE_RULES = [
   { kind: 'includes', value: `${path.sep}node_modules${path.sep}` },
   { kind: 'includes', value: `${path.sep}dist${path.sep}` },

@@ -83,7 +83,10 @@ async function seedExtractCommand(context, options, helpers) {
     writeSeedDistillArtifacts(context, result, promptInput);
     if (result.status === 'resolved') {
       writeResolvedSeed(context, result);
-    } else if (result.status === 'needs_human') {
+    } else if (
+      result.status === 'needs_human' ||
+      (result.status === 'unsupported' && seed.source === 'business' && seed.priority === 'required')
+    ) {
       const relatedCards = cards.filter(card =>
         normalizeArray(result.evidenceRefs).some(ref => normalizeArray(card.meta.evidenceRefs).includes(ref))
       );

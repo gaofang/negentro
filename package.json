@@ -12,7 +12,10 @@
     "help": "node ./src/cli.js help"
   },
   "dependencies": {
-    "@openai/codex-sdk": "^0.72.0"
+    "@openai/codex-sdk": "^0.72.0",
+    "ink": "^5.2.1",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1"
   },
   "keywords": [
     "codex",
@@ -21,7 +24,5 @@
     "skills",
     "entropy"
   ],
-  "license": "ISC",
-  "devDependencies": {
-  }
+  "license": "ISC"
 }

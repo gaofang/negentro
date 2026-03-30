@@ -115,7 +115,7 @@ async function consolidateCommand(context, options, helpers) {
   console.log(`[entro] AGENTS: ${outputPaths.agents}`);
   console.log(`[entro] skills: ${outputPaths.skillDir}`);
   console.log(
-    `[entro] 最小化更新：AGENTS ${publicationDiff.agents.changed ? 'updated' : 'unchanged'}；skills added ${publicationDiff.skills.added.length}, updated ${publicationDiff.skills.updated.length}, removed ${publicationDiff.skills.removed.length}, unchanged ${publicationDiff.skills.unchanged.length}`
+    `[entro] 最小化更新：AGENTS ${publicationDiff.written.agents.changed ? 'updated' : 'unchanged'}；skills added ${publicationDiff.written.skills.added.length}, updated ${publicationDiff.written.skills.updated.length}, removed ${publicationDiff.written.skills.removed.length}, unchanged ${publicationDiff.written.skills.unchanged.length}`
   );
 }
 

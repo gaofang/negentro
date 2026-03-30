@@ -70,52 +70,55 @@ function applyPublicationModel(context, model, renderers) {
 
   const existing = loadExistingPublicationState(context);
   const diff = diffPublicationModels(existing, model);
+  const rendered = renderPublicationOutputs(model, renderers);
+  const writeDiff = diffRenderedOutputs(context, rendered);
 
-  if (diff.agents.changed) {
+  if (writeDiff.agents.changed) {
     writeText(
       path.join(context.paths.publications, 'AGENTS.md'),
-      renderers.renderAgentsDocument({
-        title: model.agents.title,
-        sections: model.agents.sections.map(section => ({
-          heading: section.heading,
-          body: section.body,
-        })),
-        evidenceRefs: model.agents.evidenceRefs,
-      }),
+      rendered.agents.content,
     );
   }
 
   const skillsRoot = path.join(context.paths.publications, 'skills');
   ensureDir(skillsRoot);
 
-  diff.skills.removed.forEach(skillId => {
+  writeDiff.skills.removed.forEach(skillId => {
     const target = path.join(skillsRoot, skillId);
     if (fs.existsSync(target)) {
       fs.rmSync(target, { recursive: true, force: true });
     }
   });
 
-  diff.skills.added.concat(diff.skills.updated).forEach(skillEntry => {
+  writeDiff.skills.added.concat(writeDiff.skills.updated).forEach(skillEntry => {
     const skillDir = path.join(skillsRoot, skillEntry.id);
     ensureDir(skillDir);
-    writeText(path.join(skillDir, 'SKILL.md'), renderers.renderSkillDocument(skillEntry.payload));
+    writeText(path.join(skillDir, 'SKILL.md'), skillEntry.content);
   });
 
   writePublicationState(context, model, {
     schemaVersion: 1,
     generatedAt: new Date().toISOString(),
     agents: {
-      changed: diff.agents.changed,
+      changed: writeDiff.agents.changed,
+      semanticChanged: diff.agents.changed,
     },
     skills: {
-      added: diff.skills.added.map(item => item.id),
-      updated: diff.skills.updated.map(item => item.id),
-      removed: diff.skills.removed,
-      unchanged: diff.skills.unchanged,
+      added: writeDiff.skills.added.map(item => item.id),
+      updated: writeDiff.skills.updated.map(item => item.id),
+      removed: writeDiff.skills.removed,
+      unchanged: writeDiff.skills.unchanged,
+      semanticAdded: diff.skills.added.map(item => item.id),
+      semanticUpdated: diff.skills.updated.map(item => item.id),
+      semanticRemoved: diff.skills.removed,
+      semanticUnchanged: diff.skills.unchanged,
     },
   });
 
-  return diff;
+  return {
+    semantic: diff,
+    written: writeDiff,
+  };
 }
 
 function diffPublicationModels(previous, next) {
@@ -217,6 +220,81 @@ function bootstrapPublicationStateFromOutput(context) {
   };
 }
 
+function renderPublicationOutputs(model, renderers) {
+  const agentsDocument = {
+    title: model.agents.title,
+    sections: model.agents.sections.map(section => ({
+      heading: section.heading,
+      body: section.body,
+    })),
+    evidenceRefs: model.agents.evidenceRefs,
+  };
+
+  return {
+    agents: {
+      content: normalizeWrittenText(renderers.renderAgentsDocument(agentsDocument)),
+    },
+    skills: normalizeArray(model.skills).map(skill => ({
+      id: skill.id,
+      payload: materializeSkill(skill),
+      content: normalizeWrittenText(renderers.renderSkillDocument(materializeSkill(skill))),
+    })),
+  };
+}
+
+function diffRenderedOutputs(context, rendered) {
+  const agentsPath = path.join(context.paths.publications, 'AGENTS.md');
+  const existingAgents = normalizeWrittenText(readTextIfExists(agentsPath));
+  const agentsChanged = existingAgents !== rendered.agents.content;
+
+  const skillsRoot = path.join(context.paths.publications, 'skills');
+  const existingSkillIds = fs.existsSync(skillsRoot)
+    ? fs.readdirSync(skillsRoot, { withFileTypes: true })
+        .filter(entry => entry.isDirectory())
+        .map(entry => entry.name)
+        .sort()
+    : [];
+
+  const nextSkills = new Map(rendered.skills.map(skill => [skill.id, skill]));
+  const added = [];
+  const updated = [];
+  const unchanged = [];
+
+  Array.from(nextSkills.keys()).sort().forEach(skillId => {
+    const targetPath = path.join(skillsRoot, skillId, 'SKILL.md');
+    const nextSkill = nextSkills.get(skillId);
+    const existingSkill = normalizeWrittenText(readTextIfExists(targetPath));
+
+    if (!existingSkill) {
+      added.push(nextSkill);
+      return;
+    }
+
+    if (existingSkill === nextSkill.content) {
+      unchanged.push(skillId);
+      return;
+    }
+
+    updated.push(nextSkill);
+  });
+
+  const removed = existingSkillIds
+    .filter(skillId => !nextSkills.has(skillId))
+    .sort();
+
+  return {
+    agents: {
+      changed: agentsChanged,
+    },
+    skills: {
+      added,
+      updated,
+      removed,
+      unchanged,
+    },
+  };
+}
+
 function materializeSkill(skill) {
   return {
     id: skill.id,
@@ -292,6 +370,11 @@ function canonicalizeText(text) {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
+}
+
+function normalizeWrittenText(text) {
+  const normalized = String(text || '').replace(/\r\n/g, '\n');
+  return normalized.endsWith('\n') ? normalized : `${normalized}\n`;
 }
 
 function hashStable(value) {
