@@ -104,6 +104,24 @@ test('removeQuestionFamily clears all same-root open questions', () => {
   assert.equal(fs.existsSync(path.join(context.paths.questions, 'open', 'seed_other.json')), true);
 });
 
+test('getNextOpenQuestion keeps createdAt ordering after root dedupe', () => {
+  const context = makeTempContext();
+  const laterRoot = createSingleChoiceQuestion('aaa_root');
+  const earlierRoot = createSingleChoiceQuestion('zzz_root');
+  const laterFollowUp = createSingleChoiceQuestion('aaa_root_followup_old', 'aaa_root');
+
+  earlierRoot.meta.createdAt = new Date(Date.now() - 60_000).toISOString();
+  laterRoot.meta.createdAt = new Date().toISOString();
+  laterFollowUp.meta.createdAt = new Date(Date.now() - 120_000).toISOString();
+
+  writeQuestion(context, 'open', laterFollowUp);
+  writeQuestion(context, 'open', laterRoot);
+  writeQuestion(context, 'open', earlierRoot);
+
+  const nextQuestion = getNextOpenQuestion(context, readJson);
+  assert.equal(nextQuestion?.meta?.id, 'zzz_root');
+});
+
 test('reconcile deferred answer does not leave same-root open follow-ups', () => {
   const context = makeTempContext();
   const root = createSingleChoiceQuestion('seed_root');

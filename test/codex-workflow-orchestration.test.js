@@ -26,3 +26,11 @@ test('README describes Codex-first workflow usage', () => {
   assert.match(readme, /natural language/i);
   assert.match(readme, /automatic/i);
 });
+
+test('workflow orchestrator prompt requires acknowledging stop points before continuing', () => {
+  const prompt = fs.readFileSync(orchestratorPath, 'utf8');
+
+  assert.match(prompt, /workflow ack-stop --json/);
+  assert.match(prompt, /after the user answers/i);
+  assert.match(prompt, /do not restate the same stop point/i);
+});

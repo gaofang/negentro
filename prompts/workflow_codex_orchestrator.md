@@ -33,6 +33,9 @@ You must stop and ask the user at key decision points:
 - the user explicitly corrects or redirects the flow
 - a capture, review, keep/discard, or promotion decision needs confirmation
 
+After the user answers a stop point, acknowledge it with `entro workflow ack-stop --json` before continuing.
+Do not restate the same stop point after it has already been acknowledged unless the runtime emits a new stop point.
+
 ## Knowledge capture
 - Near the end of the workflow, identify candidate experience cards or correction cards.
 - Capture candidates with `entro workflow capture --json`.

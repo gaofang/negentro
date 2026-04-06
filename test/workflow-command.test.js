@@ -103,6 +103,54 @@ test('workflow next advances through the strict workflow stages', () => {
   assert.equal(result.workflow.nextStage.slug, 'prepare');
 });
 
+test('workflow stop points are not re-emitted after being acknowledged', () => {
+  const context = makeTempWorkflowContext();
+  const helpers = {
+    readJson,
+    writeJson,
+    ensureDir,
+    promptArtifactPath: path.join(context.repoRoot, 'prompts', 'workflow_main.md'),
+  };
+
+  const first = workflowCommand(context, {
+    _: ['run'],
+    stopPointId: 'intake-scope-confirmation',
+    stopPointMessage: 'Confirm whether the scope is PC only or PC + OPEN.',
+  }, helpers);
+
+  assert.equal(first.workflow.currentStopPoint.id, 'intake-scope-confirmation');
+  assert.equal(first.workflow.currentStopPoint.status, 'pending');
+
+  const second = workflowCommand(context, {
+    _: ['status'],
+  }, helpers);
+
+  assert.equal(second.workflow.currentStopPoint.id, 'intake-scope-confirmation');
+  assert.equal(second.workflow.currentStopPoint.status, 'pending');
+  assert.equal(second.workflow.currentStopPoint.repeatable, false);
+
+  const acknowledged = workflowCommand(context, {
+    _: ['ack-stop'],
+    stopPointId: 'intake-scope-confirmation',
+  }, helpers);
+
+  assert.equal(acknowledged.workflow.currentStopPoint, null);
+
+  const afterAck = workflowCommand(context, {
+    _: ['status'],
+  }, helpers);
+
+  assert.equal(afterAck.workflow.currentStopPoint, null);
+
+  const rerunWithSameStopPoint = workflowCommand(context, {
+    _: ['run'],
+    stopPointId: 'intake-scope-confirmation',
+    stopPointMessage: 'Confirm whether the scope is PC only or PC + OPEN.',
+  }, helpers);
+
+  assert.equal(rerunWithSameStopPoint.workflow.currentStopPoint, null);
+});
+
 test('workflow status is read-only before run', () => {
   const context = makeTempWorkflowContext();
   const statePath = path.join(context.paths.runtime, 'workflow', 'strict-workflow-state.json');

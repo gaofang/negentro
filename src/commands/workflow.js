@@ -52,6 +52,8 @@ function workflowCommand(context, options = {}, helpers = {}) {
       return runStrictWorkflowCommand(context, options, helpers, 'next');
     case 'status':
       return runStrictWorkflowCommand(context, options, helpers, 'status');
+    case 'ack-stop':
+      return runStrictWorkflowCommand(context, options, helpers, 'ack-stop');
     case 'capture':
       return runWorkflowKnowledgeCommand(context, options, helpers, 'capture');
     case 'review':
@@ -114,6 +116,10 @@ function runStrictWorkflowCommand(context, options, helpers, action) {
 
   if (action === 'next') {
     return runtime.next(options);
+  }
+
+  if (action === 'ack-stop') {
+    return runtime.status(options);
   }
 
   return runtime.status(options);

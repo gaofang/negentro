@@ -609,9 +609,14 @@ function dedupeOpenQuestionsByRoot(questions, questionsRoot) {
     }
   });
 
-  return Array.from(deduped.values()).sort((left, right) =>
-    String(left.meta && left.meta.id || '').localeCompare(String(right.meta && right.meta.id || ''))
-  );
+  return Array.from(deduped.values()).sort((left, right) => {
+    const leftTime = new Date(left.meta?.createdAt || 0).getTime();
+    const rightTime = new Date(right.meta?.createdAt || 0).getTime();
+    if (leftTime !== rightTime) {
+      return leftTime - rightTime;
+    }
+    return String(left.meta?.id || '').localeCompare(String(right.meta?.id || ''));
+  });
 }
 
 function normalizeQuestionDocument(question) {

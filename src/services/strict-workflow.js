@@ -115,6 +115,7 @@ function createStrictWorkflowRuntime(context, helpers = {}) {
       startedAt,
       updatedAt: new Date().toISOString(),
       promptArtifact: promptArtifactPath,
+      currentStopPoint: resolveStopPoint(state.currentStopPoint, state.history, options),
     };
 
     const currentStage = getStageById(hydrated.currentStageId);
@@ -155,6 +156,7 @@ function createStrictWorkflowRuntime(context, helpers = {}) {
     const advancedState = {
       ...state,
       currentStageId: nextStage.id,
+      currentStopPoint: null,
       updatedAt: new Date().toISOString(),
       completedAt: nextStage.index === STRICT_WORKFLOW_STAGES.length ? new Date().toISOString() : null,
       history: [...state.history, createHistoryEntry(nextStage.id, 'advanced')],
@@ -191,6 +193,27 @@ function createStrictWorkflowRuntime(context, helpers = {}) {
     }
 
     const state = normalizeState(existing, statePath, promptArtifactPath);
+
+    if (options.stopPointId && state.currentStopPoint?.id === options.stopPointId) {
+      const updatedState = {
+        ...state,
+        currentStopPoint: null,
+        updatedAt: new Date().toISOString(),
+        history: [
+          ...state.history,
+          createHistoryEntry(state.currentStageId, 'stop-acknowledged', {
+            stopPointId: options.stopPointId,
+          }),
+        ],
+      };
+      saveState(updatedState, options);
+      return buildResult('ack-stop', updatedState, {
+        created: false,
+        message: `Acknowledged stop point ${options.stopPointId}.`,
+        nextAction: buildNextAction(getStageById(updatedState.currentStageId)),
+      });
+    }
+
     return buildResult('status', state, {
       created: false,
       message: `Workflow is currently at Stage ${getStageById(state.currentStageId).index}.`,
@@ -219,6 +242,7 @@ function createInitialState(statePath, promptArtifactPath) {
     updatedAt: now,
     completedAt: null,
     currentStageId: firstStage.id,
+    currentStopPoint: null,
     history: [],
   };
 }
@@ -236,6 +260,7 @@ function normalizeState(state, statePath, promptArtifactPath) {
     currentStageId: STAGE_LOOKUP.has(state.currentStageId)
       ? state.currentStageId
       : STRICT_WORKFLOW_STAGES[0].id,
+    currentStopPoint: normalizeStopPoint(state.currentStopPoint),
     history: normalizedHistory,
   };
 }
@@ -260,6 +285,7 @@ function buildResult(action, state, meta = {}) {
       completedAt: state.completedAt,
       currentStage,
       nextStage,
+      currentStopPoint: state.currentStopPoint,
       stages: STRICT_WORKFLOW_STAGES,
       history: state.history,
     },
@@ -301,11 +327,49 @@ function getStageById(stageId) {
   return stage;
 }
 
-function createHistoryEntry(stageId, transition) {
+function createHistoryEntry(stageId, transition, extra = {}) {
   return {
     stageId,
     transition,
     timestamp: new Date().toISOString(),
+    ...extra,
+  };
+}
+
+function resolveStopPoint(currentStopPoint, history = [], options = {}) {
+  if (!options.stopPointId) {
+    return normalizeStopPoint(currentStopPoint);
+  }
+
+  if (currentStopPoint?.id === options.stopPointId) {
+    return normalizeStopPoint(currentStopPoint);
+  }
+
+  const alreadyAcknowledged = Array.isArray(history)
+    && history.some(entry => entry?.transition === 'stop-acknowledged' && entry?.stopPointId === options.stopPointId);
+
+  if (alreadyAcknowledged) {
+    return null;
+  }
+
+  return normalizeStopPoint({
+    id: options.stopPointId,
+    message: options.stopPointMessage,
+    status: 'pending',
+    repeatable: false,
+  });
+}
+
+function normalizeStopPoint(stopPoint) {
+  if (!stopPoint || !stopPoint.id) {
+    return null;
+  }
+
+  return {
+    id: String(stopPoint.id),
+    message: String(stopPoint.message || ''),
+    status: String(stopPoint.status || 'pending'),
+    repeatable: Boolean(stopPoint.repeatable),
   };
 }
 
