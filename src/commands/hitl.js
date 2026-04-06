@@ -14,6 +14,9 @@ function questionCommand(context, options, helpers) {
   if (!action || action === 'list') {
     return listQuestions(context, options, helpers);
   }
+  if (action === 'next') {
+    return nextQuestion(context, options, helpers);
+  }
   if (action === 'ask') {
     return askQuestion(context, options, helpers);
   }
@@ -38,6 +41,24 @@ function listQuestions(context, options, helpers) {
     const question = readJson(path.join(directory, file));
     console.log(`${question.meta.id} [${question.meta.status}] ${question.body.title}`);
   });
+}
+
+function nextQuestion(context, options, helpers) {
+  const { readJson } = helpers;
+  const directory = path.join(context.paths.questions, 'open');
+  const files = fs.existsSync(directory)
+    ? fs.readdirSync(directory).filter(file => file.endsWith('.json')).sort()
+    : [];
+
+  if (!files.length) {
+    console.log('[entro] 当前没有待确认问题');
+    return null;
+  }
+
+  const question = readJson(path.join(directory, files[0]));
+  console.log(`问题：${question.body.title}`);
+  console.log(`提问：${question.body.prompt}`);
+  return question;
 }
 
 function askQuestion(context, options, helpers) {
@@ -153,6 +174,7 @@ function reconcileCommand(context, options, helpers) {
     syncOpenQuestionsReport,
     createFollowUpQuestion,
     removeRelatedOpenFollowUpQuestions,
+    removeQuestionFamily,
   } = helpers;
 
   ensureInitialized(context);
@@ -205,7 +227,7 @@ function reconcileCommand(context, options, helpers) {
   }
 
   if (sufficient) {
-    const removedFollowUps = removeRelatedOpenFollowUpQuestions(context.paths.questions, questionId);
+    const removedFollowUps = removeQuestionFamily(context.paths.questions, questionId);
     const promoted = promoteRelatedCardsToNeedsReview(context, question);
     syncOpenQuestionsReport(context);
     console.log(
@@ -215,7 +237,7 @@ function reconcileCommand(context, options, helpers) {
   }
 
   if (deferred) {
-    const removedFollowUps = removeRelatedOpenFollowUpQuestions(context.paths.questions, questionId);
+    const removedFollowUps = removeQuestionFamily(context.paths.questions, questionId);
     syncOpenQuestionsReport(context);
     console.log(
       `[entro] 已对账 ${questionId}：标记为暂不确定，当前轮次不再追问${removedFollowUps.length ? `，并清理 ${removedFollowUps.join(', ')} 等遗留追问` : ''}`

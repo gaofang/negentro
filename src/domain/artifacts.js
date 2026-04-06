@@ -465,19 +465,7 @@ function createFollowUpQuestion(context, question, normalized) {
 }
 
 function removeRelatedOpenFollowUpQuestions(questionsRoot, questionId) {
-  const openDir = path.join(questionsRoot, 'open');
-  if (!fs.existsSync(openDir)) {
-    return [];
-  }
-
-  const removed = collectOpenFollowUpDescendants(questionsRoot, questionId);
-  removed.forEach(descendantId => {
-    const filePath = path.join(openDir, `${descendantId}.json`);
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-    }
-  });
-  return removed;
+  return removeQuestionFamily(questionsRoot, questionId, ['open']);
 }
 
 function collectOpenFollowUpDescendants(questionsRoot, questionId) {
@@ -510,6 +498,64 @@ function collectOpenFollowUpDescendants(questionsRoot, questionId) {
   }
 
   return descendants;
+}
+
+function removeQuestionFamily(questionsRoot, questionId, statuses = QUESTION_STATUSES) {
+  const questionMap = buildQuestionMap(questionsRoot, statuses);
+  const target = questionMap.get(questionId);
+  const targetRootId = target ? getQuestionRootId(target, questionMap) : questionId;
+  const removed = [];
+
+  normalizeArray(statuses).forEach(status => {
+    const directory = path.join(questionsRoot, status);
+    if (!fs.existsSync(directory)) {
+      return;
+    }
+
+    fs.readdirSync(directory)
+      .filter(file => file.endsWith('.json'))
+      .forEach(file => {
+        const filePath = path.join(directory, file);
+        const question = readJson(filePath);
+        if (!question || !question.meta || !question.meta.id) {
+          return;
+        }
+
+        const currentRootId = getQuestionRootId(question, questionMap);
+        if (currentRootId !== targetRootId) {
+          return;
+        }
+
+        if (question.meta.id === questionId && status !== 'open') {
+          return;
+        }
+
+        fs.unlinkSync(filePath);
+        removed.push(question.meta.id);
+      });
+  });
+
+  return removed;
+}
+
+function buildQuestionMap(questionsRoot, statuses = QUESTION_STATUSES) {
+  const map = new Map();
+  normalizeArray(statuses).forEach(status => {
+    const directory = path.join(questionsRoot, status);
+    if (!fs.existsSync(directory)) {
+      return;
+    }
+
+    fs.readdirSync(directory)
+      .filter(file => file.endsWith('.json'))
+      .forEach(file => {
+        const question = readJson(path.join(directory, file));
+        if (question && question.meta && question.meta.id) {
+          map.set(question.meta.id, question);
+        }
+      });
+  });
+  return map;
 }
 
 function getQuestionRootId(question, questionMap) {
@@ -820,6 +866,7 @@ export {
   promoteRelatedCardsToNeedsReview,
   createFollowUpQuestion,
   removeRelatedOpenFollowUpQuestions,
+  removeQuestionFamily,
   dedupeOpenQuestionsByRoot,
   normalizeQuestionDocument,
   upsertMinedCard,

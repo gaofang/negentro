@@ -1,15 +1,25 @@
 {
   "name": "@ecom/entro",
   "version": "0.1.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "description": "CLI for lowering repository entropy by distilling reusable engineering knowledge.",
+  "files": [
+    "src",
+    "README.md",
+    "package.json"
+  ],
   "bin": {
     "entro": "./src/cli.js"
   },
   "scripts": {
     "entro": "node ./src/cli.js",
-    "help": "node ./src/cli.js help"
+    "help": "node ./src/cli.js help",
+    "test": "node --test ./test/*.test.js",
+    "install:codex": "node ./src/cli.js install-codex --mode both"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "@openai/codex-sdk": "^0.72.0",

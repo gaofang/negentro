@@ -64,6 +64,35 @@ function writePublicationState(context, model, summary) {
   writeJson(path.join(context.paths.publicationState, 'last-update-summary.json'), summary);
 }
 
+function loadWorkflowKnowledgeBridge(context) {
+  return (
+    readJson(path.join(context.paths.publicationState, 'publication-knowledge-bridge.json')) || {
+      schemaVersion: 1,
+      updatedAt: '',
+      entries: [],
+    }
+  );
+}
+
+function buildPublicationBridgeSnapshot(context) {
+  const bridge = loadWorkflowKnowledgeBridge(context);
+  return {
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    reference: bridge.entries
+      .filter(entry => entry.target === 'reference')
+      .map(entry => entry.output.reference),
+    skills: bridge.entries
+      .filter(entry => entry.target === 'skills')
+      .map(entry => entry.output.skill),
+    agents: {
+      sections: bridge.entries
+        .filter(entry => entry.target === 'agents')
+        .map(entry => entry.output.section),
+    },
+  };
+}
+
 function applyPublicationModel(context, model, renderers) {
   ensureDir(context.paths.publications);
   ensureDir(path.join(context.paths.publications, 'skills'));
@@ -385,6 +414,8 @@ export {
   buildPublicationModel,
   loadExistingPublicationState,
   writePublicationState,
+  loadWorkflowKnowledgeBridge,
+  buildPublicationBridgeSnapshot,
   applyPublicationModel,
   diffPublicationModels,
 };
