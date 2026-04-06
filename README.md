@@ -96,7 +96,7 @@ entro install-codex --mode both --json
 
 ## Workflow 模式
 
-如果你希望用更轻量的工作流界面来沉淀经验卡和修正卡，可以直接使用 `workflow` 子命令。
+如果你希望把复杂前端需求放进一个更严格、可追踪的六阶段流程里，可以使用 `workflow` 集成。
 
 安装到 Codex 的 workflow 集成：
 
@@ -104,33 +104,38 @@ entro install-codex --mode both --json
 entro workflow install-codex --mode both
 ```
 
-启动或查看 workflow 运行态：
+### Codex-first 使用方式
+
+安装 `strict-frontend-workflow` 后，研发不需要手动推进每一个 workflow 子命令，而是直接在 Codex 里用 natural language 描述需求，例如：
+
+- “帮我按严格流程看这个复杂前端需求”
+- “这个需求先别急着写代码，按 strict workflow 来”
+- “继续按 workflow 往下推进，除非遇到关键决策点再问我”
+
+Codex 会把 `entro workflow --json` 视为底层协议，并 automatic 地完成：
+
+- 进入 workflow 运行态
+- 查询当前 stage 和下一步动作
+- 在默认情况下自动推进 stage 切换
+- 到达关键分叉时才停下来向用户确认
+- 在结束时整理经验卡 / 修正卡候选并请求 review 或 promote 决策
+
+对 Codex 用户来说，CLI commands 是 orchestration protocol，而不是主要的人机交互界面。只有在调试集成或排查问题时，才需要直接查看这些命令。
+
+### 底层 JSON 协议命令
+
+下面这些命令仍然是 Codex orchestration 使用的底层接口：
 
 ```bash
 entro workflow run --json
 entro workflow next --json
 entro workflow status --json
-```
-
-捕获经验 / 修正候选卡：
-
-```bash
 entro workflow capture --type experience --summary "Review one workflow step at a time" --details "先收敛再扩展" --target skills --json
 entro workflow capture --type correction --summary "Do not merge review and publish decisions" --target reference --json
-```
-
-团队评审与决策入口：
-
-```bash
 entro workflow list --state pending --json
 entro workflow review --card <cardId> --decision keep --note "保留给组内复核" --json
 entro workflow review --card <cardId> --decision discard --note "已过时" --json
 entro workflow review --card <cardId> --decision promote --target skills --json
-```
-
-如果团队已达成一致，也可以直接做轻量 promotion bridge：
-
-```bash
 entro workflow promote --card <cardId> --target agents --sectionHeading "Workflow review defaults" --json
 ```
 

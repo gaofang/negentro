@@ -1,5 +1,7 @@
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 function resolveCodexHome(env = process.env) {
   return path.resolve(env.CODEX_HOME || path.join(env.HOME || os.homedir(), '.codex'));
@@ -140,44 +142,16 @@ function buildStrictWorkflowCodexSkillDefinition() {
     skillName: 'strict-frontend-workflow',
     title: 'Strict Frontend Workflow',
     description:
-      'Use when the user wants Codex to follow a generic strict workflow for frontend work without relying on app-specific naming.',
-    markdownBody: `# Strict Frontend Workflow
-
-Use this workflow to keep frontend work in a disciplined loop inside Codex while delegating execution to local tooling.
-
-## Available subcommands
-
-- \`entro workflow run\`
-- \`entro workflow next\`
-- \`entro workflow status\`
-- \`entro workflow capture\`
-- \`entro workflow list\`
-- \`entro workflow review\`
-- \`entro workflow keep\`
-- \`entro workflow discard\`
-- \`entro workflow promote\`
-
-## Current status
-
-- Codex installation is available now.
-- Runtime stage orchestration is available in the current MVP.
-- Knowledge capture, review, and promotion bridge commands are available.
-- Downstream generation remains intentionally lightweight; promoted entries currently land in bridge artifacts rather than final AGENTS/skills output.
-- Use \`entro workflow help\` to inspect the command surface.
-
-## Operating guidance
-
-- Keep naming generic and reusable across projects.
-- Prefer structured CLI output in \`--json\` mode when integrating with Codex.
-- Do not assume any business-specific publish or release flow.` ,
+      'Use when the user wants Codex to automatically orchestrate a generic strict workflow for frontend work without relying on app-specific naming.',
+    markdownBody: readStrictWorkflowOrchestratorPrompt(),
     displayName: 'Strict Frontend Workflow',
-    shortDescription: 'Install a generic strict workflow entrypoint for frontend work',
+    shortDescription: 'Install a generic strict workflow orchestrator for frontend work',
     defaultPrompt:
-      'Use $strict-frontend-workflow to follow the generic frontend workflow entrypoints exposed by the local entro CLI.',
+      'Use $strict-frontend-workflow to automatically orchestrate the generic frontend workflow through natural-language interaction in Codex.',
     pluginDisplayName: 'Entro Workflow',
-    pluginShortDescription: 'Install generic workflow integrations for Codex',
+    pluginShortDescription: 'Install generic workflow orchestration for Codex',
     pluginLongDescription:
-      'Install reusable workflow integrations into Codex so developers can adopt a strict frontend workflow without business-specific naming.',
+      'Install reusable workflow orchestration into Codex so developers can use natural language while Codex drives the strict frontend workflow behind the scenes.',
   };
 }
 
@@ -215,6 +189,12 @@ Expected local dependency:
 
 - \`entro\` available on PATH, or executed via \`npx @ecom/entro\`
 `;
+}
+
+function readStrictWorkflowOrchestratorPrompt() {
+  const currentDir = path.dirname(fileURLToPath(import.meta.url));
+  const promptPath = path.resolve(currentDir, '..', '..', 'prompts', 'workflow_codex_orchestrator.md');
+  return fs.readFileSync(promptPath, 'utf8');
 }
 
 export {

@@ -76,6 +76,16 @@ test('resolveCodexIntegrationDefinition returns generic workflow metadata', () =
   assert.doesNotMatch(definition.pluginLongDescription, /goods-publish/i);
 });
 
+test('strict workflow Codex integration advertises automatic orchestration', () => {
+  const definition = resolveCodexIntegrationDefinition('strict-frontend-workflow');
+
+  assert.match(definition.markdownBody, /automatically orchestrate/i);
+  assert.match(definition.markdownBody, /workflow run --json/);
+  assert.match(definition.markdownBody, /workflow next --json/);
+  assert.match(definition.markdownBody, /must stop/i);
+  assert.doesNotMatch(definition.markdownBody, /use `entro workflow help` to inspect the command surface/i);
+});
+
 test('buildCodexSkillMarkdown and yaml support generic workflow naming', () => {
   const definition = resolveCodexIntegrationDefinition('strict-frontend-workflow');
   const markdown = buildCodexSkillMarkdown({
@@ -91,7 +101,7 @@ test('buildCodexSkillMarkdown and yaml support generic workflow naming', () => {
   });
 
   assert.match(markdown, /name: "strict-frontend-workflow"/);
-  assert.match(markdown, /Strict Frontend Workflow/);
+  assert.match(markdown, /Codex Workflow Orchestrator/);
   assert.match(yaml, /display_name: "Strict Frontend Workflow"/);
   assert.match(yaml, /strict-frontend-workflow/);
 });
