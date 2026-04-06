@@ -1,45 +1,117 @@
-# @ecom/entro
+# Entro
 
-`entro` 是一个仓库知识蒸馏 CLI，目标是把前端业务仓库里的规则、默认开发模式和场景经验提取成可复用的 `AGENTS.md` 与 skills。
+Entro is a repository knowledge distillation CLI for frontend-heavy codebases. It extracts project conventions, implementation patterns, and human-confirmed decisions into reusable artifacts such as `AGENTS.md` and skills.
 
-当前它支持两种主要使用方式：
+It is designed for teams working in complex business repositories where the hardest problems are not syntax, but context: hidden conventions, historical behavior, repeated implementation patterns, and project-specific decisions that are easy to miss.
 
-- 作为独立 CLI，本机直接运行
-- 作为 Codex 集成能力，让研发在 Codex CLI / Codex App 的对话里驱动提取与人工确认
+## Why Entro Exists
 
-## 安装
+Modern coding agents can generate code quickly, but they often miss the local rules that make a large repository safe to change.
 
-### 1. 本机全局安装
+Entro exists to bridge that gap. It helps teams:
+
+- discover recurring implementation patterns in a repository
+- surface ambiguous decisions that still need human confirmation
+- convert confirmed project knowledge into reusable agent-facing artifacts
+- drive structured workflows from CLI or agent environments such as Codex
+
+## Design Philosophy
+
+Entro is built around a few simple ideas.
+
+### 1. Human-in-the-loop beats blind automation
+Some repository knowledge can be mined from code. Some cannot. Entro treats unresolved ambiguity as a first-class concept and asks for human confirmation one question at a time.
+
+### 2. Structured output is the protocol
+Entro provides JSON-friendly command output so agent environments can orchestrate workflows without scraping prose from terminal logs.
+
+### 3. Repository knowledge should be reusable
+The goal is not a one-off summary. The goal is durable artifacts that future humans and agents can reuse:
+
+- `AGENTS.md`
+- skills
+- knowledge cards
+- workflow review bridges
+
+### 4. Process matters in complex codebases
+In repositories with heavy business logic and historical constraints, safer change velocity comes from better process: staged workflows, explicit review points, and lightweight knowledge capture.
+
+## Core Concepts
+
+### Extraction
+Entro scans an app or repository scope and produces structured candidate knowledge.
+
+### Questions
+When the code alone is not enough, Entro creates confirmation questions for humans.
+
+### Cards
+Knowledge is captured as lightweight structured units that can later be reviewed, promoted, or published.
+
+### Publications
+Confirmed knowledge can be rendered into stable artifacts such as `AGENTS.md` and skills.
+
+### Workflow Mode
+Workflow mode adds a stricter staged interaction layer for complex frontend tasks, including knowledge capture and team review hooks.
+
+## Key Use Cases
+
+Entro is especially useful when:
+
+- a repository has many local conventions that are not fully documented
+- coding agents need project-specific context before making changes
+- teams want reusable agent-facing documentation rather than repeated onboarding
+- frontend work involves complex forms, validation, workflows, and legacy behavior
+- human review needs to be preserved while still enabling agent automation
+
+## Installation
+
+### Global install
 
 ```bash
 npm install -g @ecom/entro
 ```
 
-安装后直接执行：
+Then:
 
 ```bash
 entro help
 ```
 
-### 2. 使用 `npx`
-
-如果已经发布到可访问的 npm 源，也可以直接运行：
+### Run with npx
 
 ```bash
 npx @ecom/entro help
 ```
 
-### 3. 仓库开发态直接运行
+### Local development
 
-在本仓库开发时，可以直接：
+Inside this repository:
 
 ```bash
 node ./src/cli.js help
 ```
 
-## CLI 用法
+## Quick Start
 
-### 推荐主命令
+A common flow for one app looks like this:
+
+```bash
+entro run --app /abs/path/to/app
+entro question next --app /abs/path/to/app
+entro answer --app /abs/path/to/app --question <id> --text "1"
+entro reconcile --app /abs/path/to/app --question <id>
+entro build --app /abs/path/to/app
+```
+
+This does three things:
+
+1. extract repository knowledge
+2. resolve ambiguous questions with human input
+3. build reusable agent-facing artifacts
+
+## Basic CLI Usage
+
+Recommended commands:
 
 ```bash
 entro run --app /abs/path/to/app
@@ -49,120 +121,181 @@ entro answer --app /abs/path/to/app --question <id> --text "1"
 entro reconcile --app /abs/path/to/app --question <id>
 ```
 
-### 给 Codex 编排时使用 JSON 输出
+## JSON / Agent Integration
+
+For agent orchestration, prefer `--json`:
 
 ```bash
 entro doctor --app /abs/path/to/app --json
 entro paths --app /abs/path/to/app --json
 entro run --app /abs/path/to/app --json
 entro question next --app /abs/path/to/app --json
-entro answer --app /abs/path/to/app --question <id> --text "跳过" --json
+entro answer --app /abs/path/to/app --question <id> --text "skip" --json
 entro reconcile --app /abs/path/to/app --question <id> --json
 entro build --app /abs/path/to/app --json
 ```
 
-`--json` 模式适合被 Codex 或其他 agent 编排调用。当前优先保证这些命令的结构化输出稳定。
+Use JSON mode when an agent or external tool needs structured state rather than terminal-oriented output.
 
-## 安装到 Codex
+## Codex Integration
 
-如果你希望研发直接在 Codex 的对话里跑 Entro，而不是进入 Entro 自己的 TUI，可以把 Entro 安装成 Codex skill / plugin：
+If you want developers to drive Entro directly from Codex instead of switching to a separate TUI, install the Codex integration:
 
 ```bash
 entro install-codex --mode both
 ```
 
-只安装 skill：
+Install only the skill:
 
 ```bash
 entro install-codex --mode skill
 ```
 
-只安装 plugin：
+Install only the plugin:
 
 ```bash
 entro install-codex --mode plugin
 ```
 
-默认会安装到：
+Default install targets:
 
 - `~/.codex/skills/entro-distill`
 - `~/.codex/plugins/entro`
 
-安装结果也可以用 JSON 查看：
+Inspect install output as JSON:
 
 ```bash
 entro install-codex --mode both --json
 ```
 
-## Workflow 模式
+## Workflow Mode
 
-如果你希望把复杂前端需求放进一个更严格、可追踪的六阶段流程里，可以使用 `workflow` 集成。
+Workflow mode is a stricter interaction layer for complex frontend work.
 
-安装到 Codex 的 workflow 集成：
+It is intended for tasks where directly generating code is risky because the repository has:
+
+- heavy business logic
+- historical behavior or compatibility constraints
+- multi-stage flows such as forms, validation, review, or submission
+
+### Install workflow mode into Codex
 
 ```bash
 entro workflow install-codex --mode both
 ```
 
-### Codex-first 使用方式
+### Codex-first usage
 
-安装 `strict-frontend-workflow` 后，研发不需要手动推进每一个 workflow 子命令，而是直接在 Codex 里用 natural language 描述需求，例如：
+After installing `strict-frontend-workflow`, developers should not need to manually drive each workflow subcommand.
 
-- “帮我按严格流程看这个复杂前端需求”
-- “这个需求先别急着写代码，按 strict workflow 来”
-- “继续按 workflow 往下推进，除非遇到关键决策点再问我”
+Instead, they can describe the task in natural language inside Codex, for example:
 
-Codex 会把 `entro workflow --json` 视为底层协议，并 automatic 地完成：
+- “Handle this frontend task with the strict workflow before writing code.”
+- “This change touches historical form logic; use the strict workflow.”
+- “Continue the workflow automatically unless you hit a real decision point.”
 
-- 进入 workflow 运行态
-- 查询当前 stage 和下一步动作
-- 在默认情况下自动推进 stage 切换
-- 到达关键分叉时才停下来向用户确认
-- 在结束时整理经验卡 / 修正卡候选并请求 review 或 promote 决策
+In this mode, Codex treats `entro workflow --json` as the protocol layer and automatically:
 
-对 Codex 用户来说，CLI commands 是 orchestration protocol，而不是主要的人机交互界面。只有在调试集成或排查问题时，才需要直接查看这些命令。
+- starts or resumes workflow state
+- reads the current stage and next action
+- advances stages by default
+- pauses only at meaningful decision points
+- collects experience cards or correction cards near the end of the flow
 
-### 底层 JSON 协议命令
+The CLI is still available, but it is not meant to be the primary interface for end users in Codex.
 
-下面这些命令仍然是 Codex orchestration 使用的底层接口：
+### Underlying workflow protocol
+
+These commands remain the underlying interfaces used by orchestration:
 
 ```bash
 entro workflow run --json
 entro workflow next --json
 entro workflow status --json
-entro workflow capture --type experience --summary "Review one workflow step at a time" --details "先收敛再扩展" --target skills --json
+entro workflow capture --type experience --summary "Review one workflow step at a time" --details "Narrow the scope before expanding" --target skills --json
 entro workflow capture --type correction --summary "Do not merge review and publish decisions" --target reference --json
 entro workflow list --state pending --json
-entro workflow review --card <cardId> --decision keep --note "保留给组内复核" --json
-entro workflow review --card <cardId> --decision discard --note "已过时" --json
+entro workflow review --card <cardId> --decision keep --note "Keep for team review" --json
+entro workflow review --card <cardId> --decision discard --note "Outdated" --json
 entro workflow review --card <cardId> --decision promote --target skills --json
 entro workflow promote --card <cardId> --target agents --sectionHeading "Workflow review defaults" --json
 ```
 
-这些卡片与 promotion bridge 会保存在运行时的 publication 相关状态目录下，用于后续生成 reference / skills / AGENTS 兼容产物；当前版本只提供 bridge 和结构化输出，不会一次性补全所有下游生成逻辑。
+Promoted cards currently land in bridge artifacts compatible with future `reference`, `skills`, and `AGENTS` generation. The current release keeps this bridge lightweight and does not fully automate all downstream publication behavior.
 
-## Codex 中的推荐使用方式
+## Example End-to-End Flow
 
-安装完成后，让研发直接在 Codex 对话里说：
+### Repository distillation flow
 
-- “帮我对当前 app 跑 entro 提取”
-- “继续回答 entro 的待确认问题”
-- “对这个 app 执行 entro build”
+```bash
+entro run --app /abs/path/to/app
+entro question next --app /abs/path/to/app --json
+entro answer --app /abs/path/to/app --question <id> --text "skip" --json
+entro reconcile --app /abs/path/to/app --question <id> --json
+entro build --app /abs/path/to/app --json
+```
 
-Codex 应该优先使用 `entro-distill` skill，并通过 `entro ... --json` 这组命令驱动完整链路，而不是要求用户切到 Entro 独立 TUI。
+### Strict workflow flow
 
-## 当前状态
+In Codex, a user can start with natural language. The orchestration layer should then:
 
-已经支持：
+1. enter the workflow
+2. clarify scope only if necessary
+3. advance through staged work
+4. stop only at decision points
+5. capture reusable knowledge at the end
 
-- 应用初始化、扫描、分类、种子提取、经验蒸馏
-- 一问一答式 HITL
-- 产出 `.entro/output/AGENTS.md` 与 `.entro/output/skills`
-- Codex skill / plugin 本地安装
-- 面向 Codex 的基础 JSON 编排接口
+## Output Artifacts
 
-仍在持续完善：
+Depending on the flow, Entro can produce or maintain:
 
-- Codex 驱动的完整真实链路回归
-- 更完整的 JSON 命令覆盖面
-- 发布到团队可用 npm 源后的 `npx @ecom/entro` 体验
+- `.entro/output/AGENTS.md`
+- `.entro/output/skills/`
+- workflow knowledge cards
+- publication bridge artifacts
+- runtime reports and structured state
+
+## Current Status
+
+Already supported:
+
+- app initialization, scanning, classification, seed extraction, and knowledge distillation
+- one-question-at-a-time HITL confirmation
+- `.entro/output/AGENTS.md` and `.entro/output/skills`
+- Codex skill / plugin installation
+- JSON-oriented orchestration interfaces
+- strict workflow runtime and lightweight workflow knowledge bridge
+
+Still evolving:
+
+- stronger end-to-end Codex orchestration behavior in real-world sessions
+- broader JSON command coverage
+- tighter workflow-driven publication into final reusable artifacts
+- better external packaging and open-source polish
+
+## Development
+
+Run the test suite:
+
+```bash
+npm test
+```
+
+Run a focused test file:
+
+```bash
+node --test ./test/hitl-flow.test.js
+```
+
+## Contributing
+
+This project is still being actively shaped. Contributions are easiest when they:
+
+- keep user-facing behavior simple
+- preserve structured machine-readable outputs
+- avoid overfitting to one business domain in public interfaces
+- improve the bridge between real repository knowledge and reusable agent artifacts
+
+## License
+
+License details are not finalized yet.
