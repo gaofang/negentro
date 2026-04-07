@@ -1,14 +1,14 @@
-# Entro
+# negentro
 
-Entro is a repository knowledge distillation CLI for frontend-heavy codebases. It extracts project conventions, implementation patterns, and human-confirmed decisions into reusable artifacts such as `AGENTS.md` and skills.
+negentro is a repository knowledge distillation CLI for frontend-heavy codebases. It extracts project conventions, implementation patterns, and human-confirmed decisions into reusable artifacts such as `AGENTS.md` and skills.
 
 It is designed for teams working in complex business repositories where the hardest problems are not syntax, but context: hidden conventions, historical behavior, repeated implementation patterns, and project-specific decisions that are easy to miss.
 
-## Why Entro Exists
+## Why negentro Exists
 
 Modern coding agents can generate code quickly, but they often miss the local rules that make a large repository safe to change.
 
-Entro exists to bridge that gap. It helps teams:
+negentro exists to bridge that gap. It helps teams:
 
 - discover recurring implementation patterns in a repository
 - surface ambiguous decisions that still need human confirmation
@@ -17,13 +17,13 @@ Entro exists to bridge that gap. It helps teams:
 
 ## Design Philosophy
 
-Entro is built around a few simple ideas.
+negentro is built around a few simple ideas.
 
 ### 1. Human-in-the-loop beats blind automation
-Some repository knowledge can be mined from code. Some cannot. Entro treats unresolved ambiguity as a first-class concept and asks for human confirmation one question at a time.
+Some repository knowledge can be mined from code. Some cannot. negentro treats unresolved ambiguity as a first-class concept and asks for human confirmation one question at a time.
 
 ### 2. Structured output is the protocol
-Entro provides JSON-friendly command output so agent environments can orchestrate workflows without scraping prose from terminal logs.
+negentro provides JSON-friendly command output so agent environments can orchestrate workflows without scraping prose from terminal logs.
 
 ### 3. Repository knowledge should be reusable
 The goal is not a one-off summary. The goal is durable artifacts that future humans and agents can reuse:
@@ -39,10 +39,10 @@ In repositories with heavy business logic and historical constraints, safer chan
 ## Core Concepts
 
 ### Extraction
-Entro scans an app or repository scope and produces structured candidate knowledge.
+negentro scans an app or repository scope and produces structured candidate knowledge.
 
 ### Questions
-When the code alone is not enough, Entro creates confirmation questions for humans.
+When the code alone is not enough, negentro creates confirmation questions for humans.
 
 ### Cards
 Knowledge is captured as lightweight structured units that can later be reviewed, promoted, or published.
@@ -55,7 +55,7 @@ Workflow mode adds a stricter staged interaction layer for complex frontend task
 
 ## Key Use Cases
 
-Entro is especially useful when:
+negentro is especially useful when:
 
 - a repository has many local conventions that are not fully documented
 - coding agents need project-specific context before making changes
@@ -68,7 +68,7 @@ Entro is especially useful when:
 ### Global install
 
 ```bash
-npm install -g @ecom/entro
+npm install -g negentro
 ```
 
 Then:
@@ -80,7 +80,7 @@ entro help
 ### Run with npx
 
 ```bash
-npx @ecom/entro help
+npx negentro help
 ```
 
 ### Local development
@@ -139,7 +139,7 @@ Use JSON mode when an agent or external tool needs structured state rather than 
 
 ## Codex Integration
 
-If you want developers to drive Entro directly from Codex instead of switching to a separate TUI, install the Codex integration:
+If you want developers to drive negentro directly from Codex instead of switching to a separate TUI, install the Codex integration:
 
 ```bash
 entro install-codex --mode both
@@ -160,7 +160,7 @@ entro install-codex --mode plugin
 Default install targets:
 
 - `~/.codex/skills/entro-distill`
-- `~/.codex/plugins/entro`
+- `~/.codex/plugins/negentro`
 
 Inspect install output as JSON:
 
@@ -247,7 +247,7 @@ In Codex, a user can start with natural language. The orchestration layer should
 
 ## Output Artifacts
 
-Depending on the flow, Entro can produce or maintain:
+Depending on the flow, negentro can produce or maintain:
 
 - `.entro/output/AGENTS.md`
 - `.entro/output/skills/`
